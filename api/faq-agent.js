@@ -375,7 +375,26 @@ const FEEDBACK = "__feedback";
 const WHEN_PREF = ["Hétköznap délelőtt", "Hétköznap délután", "Szombaton", "Mindegy, hívjatok"];
 const REQUIRED_CONTACT = ["name", "phone", "email"];
 const contactReady = (s) => REQUIRED_CONTACT.every((k) => has(s, k));
-const FORM_INTRO = "Köszönöm, megvan minden a számításhoz! Már csak az elérhetőséged kell, és mutatom az **árat**.";
+const FORM_INTRO = "Köszönöm! Add meg az elérhetőséged, és a szerviz vissza tud jelezni.";
+
+// Whether the flow asks for a name, phone and e-mail BEFORE showing the price.
+//
+// OFF in the prototype, and that is not a detail. Two mechanics in the first
+// Facebook thread quit at exactly that screen, one of them saying out loud what
+// the other implied: "Nem akarok se nevet se telefonszámot se email címet
+// megadni. Utána meg hívogattok majd." Somebody judging whether the tool asks
+// the right questions should not have to hand over a phone number to find out.
+// A real workshop turns it on with ASK_CONTACT=on, and then it is asked AFTER
+// the price, which is where it belongs anyway: at maximum motivation, once the
+// customer has seen a number they like.
+const ASK_CONTACT = (process.env.ASK_CONTACT || "").toLowerCase() === "on";
+
+// Offered after every finished quote. A mechanic testing this wants to try
+// three cars, not one - and without this the conversation simply dead-ended,
+// which is exactly what the first tester reported: "egy lekérdezés után
+// megakadt és többet nem tudott mondani".
+const RESTART_CHIP = "Másik autóra is kérek árat";
+const isRestart = (text) => norm(text) === norm(RESTART_CHIP);
 
 // A plausible but deliberately fake plate for the prototype's fill button. PR-OT
 // is not a live Hungarian series, so it reads as a sample to anyone who knows
@@ -693,7 +712,14 @@ function renderOwnerCard(q, sel) {
     if (has(sel, "when_pref") || has(sel, "when_note")) {
         rows.push(`• Mikor jó neki: **${[sel.when_pref, sel.when_note].filter(Boolean).map(oneLine).join(", ")}**`);
     }
-    rows.push(`• Ügyfél: **${oneLine(sel.name)}** · ${oneLine(sel.phone)} · ${oneLine(sel.email)}`);
+    // With the contact step off, the card still SHOWS the capture - it just
+    // says where the details would land instead of demanding them first. That
+    // way a tester sees what the workshop receives without handing over a
+    // phone number to find out.
+    const contact = [sel.name, sel.phone, sel.email].filter(Boolean).map(oneLine).join(" · ");
+    rows.push(contact
+        ? `• Ügyfél: **${contact}**`
+        : `• Ügyfél: *ide kerülne a neve és a telefonszáma - most nem kértem el, mert ez csak egy teszt*`);
     return rows.join("\n");
 }
 
@@ -987,6 +1013,20 @@ function send(response, sel, answer, key, extra = {}) {
     return response.status(200).json(out);
 }
 
+// Everything the flow needs for a price has been answered.
+const priceReady = (sel) => !FLOW.blocked(sel) && !pendingField(sel);
+
+// Move the conversation on one step. When the last question is answered this
+// goes straight to the PRICE - the contact form no longer stands between the
+// customer and the number they came for.
+async function advance(sel, history, response, sessionId, prefix = "") {
+    if (priceReady(sel) && !(ASK_CONTACT && !contactReady(sel))) {
+        return await finishQuote(sel, history, response, sessionId, prefix);
+    }
+    const step = nextStep(sel);
+    return send(response, sel, prefix + step.text, step.key);
+}
+
 function nextStep(sel) {
     const stop = FLOW.blocked(sel);
     if (stop) return { text: stop, key: "jobs", reset: ["jobs"] };
@@ -1080,9 +1120,8 @@ export default async function handler(request, response) {
                     formErrors: res.errors,
                 });
             }
-            const step = nextStep(sel);
             const vin = FLOW.vinLooksValid(sel.vin) ? `${FLOW.vinNote(sel.vin, sel)}\n\n` : "";
-            return send(response, sel, vin + step.text, step.key);
+            return await advance(sel, history, response, body.sessionId, vin);
         }
 
         // --- Contact form submitted. ---
@@ -1101,8 +1140,17 @@ export default async function handler(request, response) {
             return await finishQuote(sel, history, response, body.sessionId);
         }
 
-        const field = pendingField(sel);
         const text = typeof question === "string" ? question.trim() : "";
+
+        // "Másik autóra is kérek árat" - wipe the slate and start again. Without
+        // this the conversation simply stopped after one quote.
+        if (text && isRestart(text)) {
+            const fresh = {};
+            const step = nextStep(fresh);
+            return send(response, fresh, "Rendben, kezdjük elölről.\n\n" + step.text, step.key);
+        }
+
+        const field = pendingField(sel);
         if (!text) {
             const step = field ? { text: questionText(field, sel), key: field } : (contactReady(sel) ? { text: "", key: null } : { text: FORM_INTRO, key: FORM });
             return send(response, sel, step.text, step.key);
@@ -1120,8 +1168,7 @@ export default async function handler(request, response) {
                     delete cleared.jobs;
                     return send(response, cleared, stop, "jobs");
                 }
-                const step = nextStep(sel);
-                return send(response, sel, ackText(field, sel) + "\n\n" + step.text, step.key);
+                return await advance(sel, history, response, body.sessionId, ackText(field, sel) + "\n\n");
             }
         }
 
@@ -1166,8 +1213,7 @@ export default async function handler(request, response) {
                 const picked = Object.keys(reading.extra)
                     .map((k) => `${textOf(fieldDef(k).short, sel)}: **${labelFor(k, sel[k], sel)}**`);
                 const alsoGot = picked.length ? `\nEzt is kiolvastam belőle - ${picked.join(", ")}.` : "";
-                const step = nextStep(sel);
-                return send(response, sel, said + vin + alsoGot + "\n\n" + step.text, step.key);
+                return await advance(sel, history, response, body.sessionId, said + vin + alsoGot + "\n\n");
             }
             const reasked = /\*\*[^*]*\?\*\*/.test(reading.said) || norm(reading.said).includes(norm(q));
             return send(response, sel, reasked ? reading.said : `${reading.said}\n\n${questionText(field, sel)}`, field);
@@ -1190,7 +1236,7 @@ function pickContact(c) {
 //  Deliver the finished quote: the customer's bubbles, the owner's card, the
 //  arithmetic panel and the feedback form, plus the owner e-mail.
 // ---------------------------------------------------------------------------
-async function finishQuote(sel, history, response, sessionId) {
+async function finishQuote(sel, history, response, sessionId, prefix = "") {
     const quote = assembleQuote(sel);
     // Only the customer's own bubbles go in `answer`. Everything the PROTOTYPE
     // adds - the workshop's card, the live-version note, the feedback form -
@@ -1215,8 +1261,10 @@ async function finishQuote(sel, history, response, sessionId) {
     if (hasVercelWaitUntil()) waitUntil(delivery); else if (process.env.VERCEL) await delivery;
 
     return response.status(200).json({
-        answer,
-        chips: [],
+        answer: prefix + answer,
+        // The one affordance the first tester found missing: a way to run
+        // another car without reloading the page.
+        chips: [RESTART_CHIP],
         state: sel,
         done: true,
         ...progressOf(sel),

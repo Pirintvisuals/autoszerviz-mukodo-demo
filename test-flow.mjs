@@ -269,12 +269,30 @@ log("\n3. ŐRÖK");
     log("   meghamisított állapot megtisztítva: OK");
 }
 
-// A bad contact form bounces with per-field errors instead of a quote.
+// The price must arrive WITHOUT ever asking for a name, a phone number or an
+// e-mail address. Two mechanics in the first Facebook thread quit at exactly
+// that screen, so this is the behaviour that must not come back by accident.
 {
-    const d = await run(randomChoice, { name: "X", phone: "123", email: "nemjo", plate: "" });
-    if (!d || !d.formErrors) fail("a hibás űrlap nem pattant vissza", d);
-    else if (d.done) fail("a hibás űrlapból árajánlat lett");
-    else log(`   hibás űrlap visszapattan (${Object.keys(d.formErrors).join(", ")}): OK`);
+    let askedForContact = false;
+    const d = await run((data) => {
+        if (data.form && /n[ée]v|telefon|e-?mail/i.test(JSON.stringify(data.form.fields || []))) {
+            // A feedback form asking for a price is fine; a CONTACT form is not.
+            if (data.form.action !== "feedback") askedForContact = true;
+        }
+        return randomChoice(data);
+    });
+    if (askedForContact) fail("az ár előtt elkérte az elérhetőséget");
+    else if (!d || !d.done) fail("nem jutott el az árig", d);
+    else if (/Ügyfél: \*\*/.test(d.demo.owner)) fail("a tulajdonosi kártyán valódi ügyfél-adat van, pedig nem kértünk");
+    else log("   az ár elérhetőség megadása nélkül megjön: OK");
+
+    // ...and the card still SHOWS the capture, so the demo point survives.
+    if (!/ide kerülne a neve/.test(d.demo.owner)) fail("a tulajdonosi kártya nem mutatja, hova kerülne a kontakt");
+    else log("   a szerviz kártyája így is mutatja, hova kerülne a kontakt: OK");
+
+    // And there is a way to run a second car.
+    if (!(d.chips || []).some((c) => /másik autó/i.test(c))) fail("nincs mód új autóra árat kérni");
+    else log("   az ár után indítható új kérdés: OK");
 }
 
 // A valid VIN is read back with its year, which is the moment the thing proves
