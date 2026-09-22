@@ -500,7 +500,9 @@
     const go = document.createElement("button");
     go.type = "button";
     go.className = "faq-chip faq-chip-next";
-    go.textContent = nextLabel || T.next;
+    // An arrow, not a bullet: it has to read as the SUBMIT action even in a
+    // flattened copy-paste, never as one more option in the list above it.
+    go.textContent = "→ " + (nextLabel || T.next);
     go.disabled = true;
 
     const refresh = () => {
@@ -517,7 +519,13 @@
       chip.dataset.label = label;
       chip.setAttribute("aria-pressed", "false");
       chip.innerHTML = `<span class="faq-chip-tick" aria-hidden="true">${ICON.check}</span><span></span>`;
-      chip.lastChild.textContent = label;
+      // The bullet is real text, not a CSS list-style, on purpose: this widget
+      // gets copy-pasted as plain text into Facebook comments, and a CSS bullet
+      // disappears the moment formatting is stripped. Without it, twelve job
+      // options and the submit button below them collapse into one
+      // indistinguishable list - which is exactly what happened when a job
+      // option got mistaken for a 13th option instead of a job.
+      chip.lastChild.textContent = "• " + label;
       chip.onclick = () => {
         if (picked.has(label)) picked.delete(label);
         else {
