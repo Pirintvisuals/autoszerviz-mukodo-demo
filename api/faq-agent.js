@@ -296,7 +296,7 @@ function mapAnswer(field, text, sel) {
 }
 
 const CONTACT_KEYS = ["name", "phone", "email", "plate", "when_pref", "when_note"];
-const FEEDBACK_KEYS = ["fb_verdict", "fb_price", "fb_text", "fb_role"];
+const FEEDBACK_KEYS = ["fb_verdict", "fb_price", "fb_text", "fb_role", "lead_name", "lead_contact", "lead_shop"];
 
 function sanitizeState(raw) {
     const out = {};
@@ -597,6 +597,37 @@ function feedbackForm(sel) {
             { key: "fb_verdict", label: "Egy szóban", type: "select", options: FB_VERDICT, value: "", optional: true },
         ],
     };
+}
+
+// ---------------------------------------------------------------------------
+//  The opt-in. This is the only place the prototype asks to be contacted back.
+//
+//  It exists because the first version asked for a name and phone BEFORE the
+//  price, under a label that said "Hívni senki nem fog" - which made those
+//  details unusable, correctly. An opt-in asked AFTER somebody has given their
+//  own price, framed as an offer rather than a toll, is both honest and the
+//  actual sales conversation: "megmutatom ugyanezt a TE óradíjaddal".
+// ---------------------------------------------------------------------------
+const LEAD = "__lead";
+function leadForm(sel) {
+    return {
+        action: "lead",
+        title: "Szerviztulajdonos vagy?",
+        why: "Ha megmondod az óradíjadat és honnan szerzed az alkatrészt, beállítom rá és megmutatom, mit dobna ki a TE áraiddal. Ingyen, és nem küldök semmi mást.",
+        submit: "Érdekel, mutasd meg",
+        fields: [
+            { key: "lead_name", label: "Neved", placeholder: "pl. Kovács Zoltán", type: "text", value: "", optional: true },
+            { key: "lead_contact", label: "Hol érlek el?", placeholder: "telefon vagy e-mail", type: "text", value: "", optional: true },
+            { key: "lead_shop", label: "Szerviz neve, helye (nem kötelező)", placeholder: "pl. Kovács Autószerviz, Debrecen", type: "text", value: "", optional: true },
+        ],
+    };
+}
+const LEAD_KEYS = ["lead_name", "lead_contact", "lead_shop"];
+function pickLead(raw) {
+    const out = {};
+    if (!raw || typeof raw !== "object") return out;
+    for (const k of LEAD_KEYS) if (has(raw, k)) out[k] = oneLine(raw[k]).slice(0, 200);
+    return out;
 }
 
 function pickFeedback(raw) {
@@ -1123,9 +1154,31 @@ export default async function handler(request, response) {
                     form: feedbackForm(sel),
                 });
             }
+            return response.status(200).json({
+                answer: "Köszönöm, ez tényleg sokat segít.",
+                chips: [RESTART_CHIP], state: sel, ...progressOf(sel),
+                form: leadForm(sel),
+                feedbackDone: true,
+            });
+        }
+
+        // --- Somebody asked to see it with their OWN prices. ---
+        if (body.lead) {
+            const lead = pickLead(body.lead);
+            sel = { ...sel, ...lead };
+            if (!lead.lead_contact) {
+                return response.status(200).json({
+                    answer: "", chips: [RESTART_CHIP], state: sel, ...progressOf(sel),
+                    form: leadForm(sel),
+                    formErrors: { lead_contact: "Ide írj egy telefonszámot vagy e-mail címet, különben nem tudok visszajelezni." },
+                });
+            }
+            const delivery = sendLeadEmail(sel, history, { sessionId: body.sessionId }).catch(() => {});
+            if (hasVercelWaitUntil()) waitUntil(delivery); else await delivery;
+            console.log("ÉRDEKLŐDŐ:", JSON.stringify(lead));
             return send(response, sel,
-                "Köszönöm, ez tényleg sokat segít. Ha van még, amit hozzátennél, írd le ide nyugodtan.",
-                RESTART_CHIP ? null : null, { feedbackDone: true, chips: [RESTART_CHIP] });
+                `Köszönöm! Jelentkezem a megadott elérhetőségen. Ha addig kérdésed van: **${PHONE}**`,
+                null, { chips: [RESTART_CHIP] });
         }
 
         // --- A one-screen group form submitted (the car, or the job details). ---
@@ -1436,6 +1489,31 @@ async function sendFeedbackEmail(sel, history, meta = {}) {
         transcriptText(history),
     ].join("\n");
     return await resendSend({ subject: `[VISSZAJELZÉS] ${sel.fb_verdict || "szerelő"}${sel.fb_price ? ` - nála ${sel.fb_price}` : ""}`, html, text });
+}
+
+async function sendLeadEmail(sel, history, meta = {}) {
+    const rows = [
+        ["Név", sel.lead_name],
+        ["Elérhetőség", sel.lead_contact],
+        ["Szerviz", sel.lead_shop],
+        ["Nála mennyi lenne", sel.fb_price],
+        ["Mit írt", sel.fb_text],
+        ["Egy szóban", sel.fb_verdict],
+    ].filter(([, v]) => String(v || "").trim());
+    const html = `
+<div style="font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;max-width:640px">
+  <h2 style="margin:0 0 6px">Érdeklődő - kéri a saját áraival</h2>
+  <p style="margin:0 0 14px;color:#666">Ő kérte, hogy keresd meg. Nem hideg megkeresés.</p>
+  <table style="border-collapse:collapse;font-size:14px">
+    ${rows.map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#666">${esc(k)}</td><td style="padding:4px 0"><b>${esc(v)}</b></td></tr>`).join("")}
+  </table>
+  <h3 style="margin:16px 0 4px">Amit kiszámolt neki</h3>
+  <table style="border-collapse:collapse;font-size:14px">${detailRows(sel)}</table>
+  <h3 style="margin:16px 0 4px">A teljes beszélgetés</h3>
+  ${transcriptHtml(history)}
+</div>`;
+    const text = ["ÉRDEKLŐDŐ - kéri a saját áraival", ...rows.map(([k, v]) => `${k}: ${v}`), "", transcriptText(history)].join("\n");
+    return await resendSend({ subject: `[ÉRDEKLŐDŐ] ${sel.lead_name || sel.lead_shop || "szerelő"} - ${sel.lead_contact}`, html, text });
 }
 
 async function sendTranscriptEmail(sel, history, meta = {}) {

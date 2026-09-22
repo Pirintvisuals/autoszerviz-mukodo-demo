@@ -7,7 +7,12 @@
     id: "autoszerviz-minta",
     subtitle: "Automata árajánlatkészítő",
     phone: "+36 70 250 1739",
-    greeting: "Szia! Pár kérdés, és kapsz egy **tételes becslést** a javításra.\n\nKözben **bármit megkérdezhetsz**.",
+    // The framing has to live HERE, not on the page behind it: the chat opens
+    // itself, so the landing page headline is never read. The first Facebook
+    // thread measured this - mechanics assumed the tool was for THEM, compared
+    // it to Autodata, and concluded it was pointless. It is not a quoting tool
+    // for a workshop; it is the thing that answers the workshop's customer.
+    greeting: "Szia! Képzeld el, hogy este 11-kor ír valaki a szerviz oldalára, hogy **mennyibe kerül egy kuplungcsere**.\n\nÉn válaszolok helyette: végigkérdezem, ami az árhoz kell, és reggel **kész ajánlat várja a szervizt**, az ügyfél számával együtt.\n\n**Most te vagy az ügyfél.** Közben bármit megkérdezhetsz.",
     hint: "Kérdezz bátran - pl. mi van benne az árban",
     teasers: [
       "Mennyibe kerül a vezérműszíj csere?",
@@ -907,7 +912,7 @@
     if (sending) return;
     // The feedback form posts under its own key, so the backend can tell a
     // mechanic's verdict from a customer's contact details.
-    const ACTIONS = { feedback: 1, group: 1, contact: 1 };
+    const ACTIONS = { feedback: 1, group: 1, contact: 1, lead: 1 };
     const key = form && ACTIONS[form.action] ? form.action : "contact";
     const ECHO = {
       feedback: ["fb_verdict", "fb_price", "fb_text"],
@@ -915,6 +920,7 @@
       // conversation it replaced rather than jumping straight to the price.
       group: Object.keys(values),
       contact: ["name", "phone", "email"],
+      lead: ["lead_name", "lead_contact", "lead_shop"],
     };
     const shown = ECHO[key].map((k) => values[k]).filter(Boolean).join(" · ");
     clearContactForm();
