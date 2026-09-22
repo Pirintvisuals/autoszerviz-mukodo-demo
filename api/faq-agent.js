@@ -596,6 +596,7 @@ function assembleQuote(sel) {
         exclusions: raw.exclusions || [],
         flags: raw.flags || [],
         workings: raw.workings || [],
+        assumed: raw.assumed || [],
         expertise: raw.expertise || null,
         diagnosticOnly: !!raw.diagnosticOnly,
         items, total,
@@ -631,6 +632,7 @@ function renderCustomerQuote(q, sel) {
             `(bruttó ár, az ÁFA benne van)`,
             ``,
             `Tájékoztató ár. A szerviz erősíti meg, miután látta az autót.`,
+            ...(q.assumed.length ? [``, `Ahol nem tudtad a választ, a **szokásos esettel** számoltam, nem a legolcsóbbal.`] : []),
         ];
 
     // Only the single most important caveat goes in the bubble. The full list
@@ -656,7 +658,11 @@ function renderCustomerQuote(q, sel) {
 // A finished price with seven bullets stapled under it is not a quote, it is a
 // wall - and the person reading it has already got the number they came for.
 function scopePanel(q) {
-    const lines = [`**Benne van:** az ár ${q.includes}.`];
+    const lines = [];
+    // The assumptions come FIRST. They are the part a customer could be
+    // surprised by at the counter, so they outrank the inclusions list.
+    for (const a of q.assumed) lines.push(`**Feltételeztem:** ${a}`);
+    lines.push(`**Benne van:** az ár ${q.includes}.`);
     for (const e of q.exclusions) lines.push(`**Ezen felül jöhet:** ${e}`);
     for (const f of q.flags.slice(1)) lines.push(`**Fontos:** ${f}`);
     if (q.expertise) lines.push(`**Egy tipp:** ${q.expertise}`);

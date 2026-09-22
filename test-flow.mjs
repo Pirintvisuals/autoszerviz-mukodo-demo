@@ -365,12 +365,39 @@ log("\n3. ŐRÖK");
         else log(`   ${String(d.__steps).padStart(2)} képernyő: ${sc.name}`);
     }
 
-    // An unknown answer must always land on the CHEAPER side, so the floor
-    // stays a floor.
-    const unknown = assembleQuote({ ...car, jobs: "vezermuszij", km: "k200", vez_vizpumpa: "nem", vezerles_tipus: "nem_tudom" }).total;
-    const belt = assembleQuote({ ...car, jobs: "vezermuszij", km: "k200", vez_vizpumpa: "nem", vezerles_tipus: "szij" }).total;
-    if (unknown !== belt) fail("a 'nem tudom' nem a szíjas, olcsóbb változattal számolt", { unknown, belt });
-    else log("   a 'nem tudom' mindig az olcsóbb változatot veszi: OK");
+    // A "nem tudom" must land on the TYPICAL case, not the cheapest one. A
+    // quote built from the cheapest answer to every unknown is a best case that
+    // never happens, and the customer meets the real number at the counter -
+    // which is the single worst outcome this tool can produce.
+    {
+        const base = { make: "Volkswagen", model: "Passat", engine: "2.0 TDI dízel", year: "2012", vin: "nincs" };
+        // Parts tier: unknown must price as the middle tier, not the cheapest.
+        const job = { ...base, jobs: "fek", fek_hol: "elso", fek_tarcsa: "betet" };
+        const cheapest = assembleQuote({ ...job, parts_tier: "utangyartott" }).total;
+        const middle = assembleQuote({ ...job, parts_tier: "markas" }).total;
+        const unknown = assembleQuote({ ...job, parts_tier: "nem_tudom" }).total;
+        if (unknown === cheapest) fail("a 'nem tudom' alkatrész-kategória a legolcsóbbal számolt", { unknown, cheapest });
+        else if (unknown !== middle) fail("a 'nem tudom' nem a középső kategóriával számolt", { unknown, middle });
+        else log(`   ismeretlen alkatrész-kategória -> középső (${formatHuf(unknown)}), nem a legolcsóbb (${formatHuf(cheapest)}): OK`);
+
+        // Dual-mass flywheel: unknown on a modern diesel must assume it IS there.
+        const clutch = { ...base, jobs: "kuplung", kuplung_valto: "manualis", kuplung_hajtas: "elso", parts_tier: "markas" };
+        const noKtl = assembleQuote({ ...clutch, kuplung_ktl: "nem" }).total;
+        const unknownKtl = assembleQuote({ ...clutch, kuplung_ktl: "nem_tudom" }).total;
+        if (unknownKtl <= noKtl) fail("modern dízelnél a 'nem tudom' elhagyta a kettőstömegű lendkereket", { unknownKtl, noKtl });
+        else log(`   ismeretlen lendkerék 2005+ dízelnél -> beleszámol (${formatHuf(unknownKtl)} vs ${formatHuf(noKtl)}): OK`);
+        // ...but on an old petrol it must NOT invent one.
+        const oldPetrol = assembleQuote({ ...clutch, engine: "1.6 benzin", year: "2002", kuplung_ktl: "nem_tudom" }).total;
+        const oldPetrolNo = assembleQuote({ ...clutch, engine: "1.6 benzin", year: "2002", kuplung_ktl: "nem" }).total;
+        if (oldPetrol !== oldPetrolNo) fail("régi benzinesnél kitalált egy kettőstömegű lendkereket", { oldPetrol, oldPetrolNo });
+        else log("   régi benzinesnél nem talál ki lendkereket: OK");
+
+        // Every assumption the model makes has to be written down for the
+        // customer - an invisible assumption is what blows up at the counter.
+        const q = assembleQuote({ ...clutch, kuplung_ktl: "nem_tudom", parts_tier: "nem_tudom" });
+        if (q.assumed.length < 2) fail("nem írta le, mit feltételezett", q.assumed);
+        else log(`   a feltételezéseket kiírja (${q.assumed.length} db): OK`);
+    }
 }
 
 log(`\n${failures ? `${failures} HIBA` : "MINDEN TESZT RENDBEN"}\n`);

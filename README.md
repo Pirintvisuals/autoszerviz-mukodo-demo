@@ -74,16 +74,34 @@ A leggyorsabb út viszont az, ha valaki egy mondatban ír be mindent: a
 „Passat 2.0 TDI, 2012-es, vezérműszíj kellene” egyszerre négy kérdést válaszol
 meg, és a bot visszamondja, mit olvasott ki belőle. Ehhez kell az AI-kulcs.
 
-### Ár: alapár, nem sáv
+### Ár: reális alapár, nem sáv és nem a legjobb eset
 
-Minden alkatrészár a választott kategória **legolcsóbb** változatával számol,
-minden bizonytalanság a **olcsóbb** irányba van feltételezve, és a becslés
-`X Ft-tól` alakban jelenik meg, mellette **felsorolva, mi jöhet még hozzá**
-(kopott tárcsa, kettőstömegű lendkerék, beszorult csavar, R1234yf gáz…).
+A becslés `X Ft-tól` alakban jelenik meg, mellette **felsorolva, mi jöhet még
+hozzá** (kopott tárcsa, beszorult csavar, R1234yf gáz…). Ez tudatos: egy sáv az
+alsó széléhez horgonyozza az ügyfelet, és a szerviznek kell felfelé érvelnie a
+pultnál.
 
-Ez tudatos: egy sáv az alsó széléhez horgonyozza az ügyfelet, és a szerviznek
-kell felfelé érvelnie a pultnál. Egy alapár csak felfelé mozdulhat egy olyan
-számról, amit az ügyfél eleve minimumként hallott.
+**De az alapár nem a legjobb eset.** Egy korábbi verzió minden „nem tudom”-ot a
+legolcsóbb irányba oldott fel. Ez ugyanabba a hibába fut bele, csak a másik
+oldalról: öt ismeretlenből összerakott legolcsóbb ár olyan szám, ami a
+gyakorlatban soha nem jön ki, az ügyfél pedig a pultnál hall egy 40-60
+százalékkal magasabbat. Pont az a jelenet, amit az alapár meg akart előzni.
+
+Ezért egy ismeretlen válasz a **szokásos esetre** oldódik fel, és az ajánlat
+**kiírja, mit feltételezett**:
+
+| „Nem tudom” | Mivel számol | Miért |
+|---|---|---|
+| Alkatrész-kategória | márkás utángyártott (középső) | ezt szokta a szerviz alapból beépíteni |
+| Kettőstömegű lendkerék | 2005+ dízelnél: **van** | ott ez a szokásos, és 180 000 Ft-os tétel |
+| Start-stop akku | 2015+ autónál: **AGM** | akkor már jellemzően van benne |
+| Keréktárcsa mérete | 17-18 coll | ez a leggyakoribb |
+| Motor | benzines | rövidebb normaidő, de ki van írva |
+
+Egy Passat kuplungcserénél ez 180 000 Ft helyett 358 000 Ft-ot jelent, ha a
+lendkerékre azt mondják „nem tudom”. A magasabb szám a kellemetlenebb, de az az
+igaz - és a `test-flow.mjs` őrzi, hogy egy „nem tudom” soha ne a legolcsóbb
+árat adja vissza.
 
 ---
 
