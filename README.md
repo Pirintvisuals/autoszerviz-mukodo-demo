@@ -201,6 +201,17 @@ Más nem kell hozzá. A `lib/cars.js` és az `api/faq-agent.js` szervizfüggetle
 
 ---
 
+## Elérhetőség: név és e-mail, telefon nélkül, naponta egyszer küldve
+
+Az árat SOHA nem előzi meg elérhetőség-kérés. Ha az ASK_CONTACT bekapcsolva
+van (alapból igen a prototípusban is), az ár UTÁN kér nevet és e-mail címet -
+telefonszámot soha, mert ez volt a legtöbb kilépés oka az első teszt-körben.
+
+Ugyanaz az IP naponta egyszer küldi ki a nevet/e-mailt levélben (RL_LEAD_PER_DAY,
+alapból 1). Ez a levélre vonatkozik, nem a kalkulátorra: bárki annyi autóra
+kérhet árat, amennyire akar (`Másik autóra is kérek árat`), csak a szerviz
+postafiókjába nem érkezik ugyanattól a tesztelőtől tíz másolat.
+
 ## Amit ez NEM tud, és miért
 
 Egy chatből nem jön ki pontos árajánlat - se ebből, se másból. A végszámlát

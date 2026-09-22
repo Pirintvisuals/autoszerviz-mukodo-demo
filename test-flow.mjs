@@ -46,7 +46,7 @@ async function call(body) {
     return { status: res.statusCode, data: out };
 }
 
-const CONTACT = { name: "Teszt Elek", phone: "+36 30 123 4567", email: "teszt@gmail.com", plate: "AB-CD-123", when_pref: "Hétköznap délután", when_note: "" };
+const CONTACT = { name: "Teszt Elek", email: "teszt@gmail.com", plate: "AB-CD-123", when_pref: "Hétköznap délután" };
 const rnd = (n) => Math.floor(Math.random() * n);
 const MULTI_SEP = " · ";
 
@@ -98,8 +98,12 @@ async function run(choose, contact = CONTACT) {
             return null;
         }
     }
+    const beforeContact = data; // the response that carried the contact form
     const r = await call({ contact, history, state: data.state });
-    if (r.data) r.data.__steps = steps; // the contact form was counted on its own pass
+    if (r.data) {
+        r.data.__steps = steps; // the contact form was counted on its own pass
+        r.data.__beforeContact = beforeContact;
+    }
     return r.data;
 }
 
@@ -269,26 +273,31 @@ log("\n3. ŐRÖK");
     log("   meghamisított állapot megtisztítva: OK");
 }
 
-// The price must arrive WITHOUT ever asking for a name, a phone number or an
-// e-mail address. Two mechanics in the first Facebook thread quit at exactly
-// that screen, so this is the behaviour that must not come back by accident.
+// The contact details are asked for, but NEVER before the price and never
+// including a phone number. Two mechanics in the first Facebook thread quit at
+// the old pre-price form, and the phone field was the part they named.
 {
-    let askedForContact = false;
+    let phoneAsked = false;
     const d = await run((data) => {
-        if (data.form && /n[ée]v|telefon|e-?mail/i.test(JSON.stringify(data.form.fields || []))) {
-            // A feedback form asking for a price is fine; a CONTACT form is not.
-            if (data.form.action !== "feedback") askedForContact = true;
-        }
+        // Check the FIELD KEYS only, not the reassuring "why" copy that says
+        // out loud we do not ask for a phone number - that text legitimately
+        // contains the word "telefon".
+        const f = data.form;
+        if (f && f.action !== "lead" && (f.fields || []).some((x) => x.key === "phone")) phoneAsked = true;
         return randomChoice(data);
     });
-    if (askedForContact) fail("az ár előtt elkérte az elérhetőséget");
-    else if (!d || !d.done) fail("nem jutott el az árig", d);
-    else if (/Ügyfél: \*\*/.test(d.demo.owner)) fail("a tulajdonosi kártyán valódi ügyfél-adat van, pedig nem kértünk");
-    else log("   az ár elérhetőség megadása nélkül megjön: OK");
-
-    // ...and the card still SHOWS the capture, so the demo point survives.
-    if (!/ide kerülne a neve/.test(d.demo.owner)) fail("a tulajdonosi kártya nem mutatja, hova kerülne a kontakt");
-    else log("   a szerviz kártyája így is mutatja, hova kerülne a kontakt: OK");
+    const before = d && d.__beforeContact;
+    if (before && ((before.form && before.form.fields) || []).some((x) => x.key === "phone")) phoneAsked = true;
+    if (phoneAsked) fail("telefonszámot kért");
+    else log("   telefonszámot soha nem kér: OK");
+    // The very response that carries the contact form must already carry the
+    // price: the number is never held hostage behind the details.
+    if (!before || !/Ft-tól|Diagnosztika/.test(before.answer || "")) {
+        fail("az elérhetőséget az ár előtt kérte", before && before.answer);
+    } else log("   az ár előbb jön, mint az elérhetőség: OK");
+    if (!d || !d.done) fail("nem jutott el a végéig", d);
+    else if (!/Ügyfél: \*\*/.test(d.demo.owner)) fail("a megadott név nem került rá a szerviz kártyájára");
+    else log("   a megadott név megjelenik a szerviz kártyáján: OK");
 
     // And there is a way to run a second car.
     if (!(d.chips || []).some((c) => /másik autó/i.test(c))) fail("nincs mód új autóra árat kérni");

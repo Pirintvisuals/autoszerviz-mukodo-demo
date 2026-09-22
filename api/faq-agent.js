@@ -116,6 +116,11 @@ function rateLimit(key, limit, windowMs) {
 const RL_CHAT = { limit: Number(process.env.RL_CHAT_PER_MIN) || 40, windowMs: 60_000 };
 const RL_TRANSCRIPT = { limit: Number(process.env.RL_TRANSCRIPT_PER_HOUR) || 20, windowMs: 60 * 60_000 };
 const RL_SELFTEST = { limit: Number(process.env.RL_SELFTEST_PER_HOUR) || 6, windowMs: 60 * 60_000 };
+// One set of contact details per person per day. Somebody can still price as
+// many cars as they like - that is what the restart button is for - but the
+// workshop should not get the same person's details ten times over, and the
+// inbox should not fill up with duplicates of one tester.
+const RL_LEAD = { limit: Number(process.env.RL_LEAD_PER_DAY) || 1, windowMs: 24 * 60 * 60_000 };
 
 const MAX_QUESTION_LEN = 2000;
 const MAX_HISTORY_MSGS = 80;
@@ -373,21 +378,20 @@ function ackText(field, sel) {
 const FORM = "__contact";
 const FEEDBACK = "__feedback";
 const WHEN_PREF = ["Hétköznap délelőtt", "Hétköznap délután", "Szombaton", "Mindegy, hívjatok"];
-const REQUIRED_CONTACT = ["name", "phone", "email"];
+const REQUIRED_CONTACT = ["name", "email"];
 const contactReady = (s) => REQUIRED_CONTACT.every((k) => has(s, k));
 const FORM_INTRO = "Köszönöm! Add meg az elérhetőséged, és a szerviz vissza tud jelezni.";
 
-// Whether the flow asks for a name, phone and e-mail BEFORE showing the price.
+// Whether the flow asks who the quote is for. ON, but only AFTER the price,
+// and deliberately WITHOUT a phone number.
 //
-// OFF in the prototype, and that is not a detail. Two mechanics in the first
-// Facebook thread quit at exactly that screen, one of them saying out loud what
-// the other implied: "Nem akarok se nevet se telefonszámot se email címet
-// megadni. Utána meg hívogattok majd." Somebody judging whether the tool asks
-// the right questions should not have to hand over a phone number to find out.
-// A real workshop turns it on with ASK_CONTACT=on, and then it is asked AFTER
-// the price, which is where it belongs anyway: at maximum motivation, once the
-// customer has seen a number they like.
-const ASK_CONTACT = (process.env.ASK_CONTACT || "").toLowerCase() === "on";
+// The first version asked for name, phone and e-mail BEFORE the price, and two
+// mechanics quit at exactly that screen - one saying out loud what the other
+// implied: "Nem akarok se nevet se telefonszámot se email címet megadni. Utána
+// meg hívogattok majd." The phone number is the part that reads as "then they
+// ring me". Asking for a name and an e-mail once the number is already on
+// screen costs far less, and by then it is a fair trade rather than a toll.
+const ASK_CONTACT = (process.env.ASK_CONTACT || "on").toLowerCase() === "on";
 
 // Offered after every finished quote. A mechanic testing this wants to try
 // three cars, not one - and without this the conversation simply dead-ended,
@@ -425,16 +429,17 @@ function contactForm(sel) {
     const val = (k) => (has(sel, k) ? String(sel[k]) : "");
     return {
         title: "Kinek szól az árajánlat?",
-        why: "Ez minta: az adataidat csak azért kérjük, hogy lásd, mit kapna meg a szerviz. Hívni senki nem fog.",
-        submit: "Kérem az árat",
+        // No phone field, and the reason is said out loud. "Utána meg
+        // hívogattok majd" was the objection that cost the most drop-offs, and
+        // the honest answer is to not ask for the number at all.
+        why: "Telefonszámot nem kérünk - nem fog senki hívogatni. A nevedre csak azért van szükség, hogy lásd, mit kapna meg a szerviz.",
+        submit: "Mehet",
         fields: [
             { key: "name", label: "Név", placeholder: "A neved", type: "text", autocomplete: "name", value: val("name") },
-            { key: "phone", label: "Telefonszám", placeholder: "+36 30 123 4567", type: "tel", autocomplete: "tel", value: val("phone") },
             { key: "email", label: "E-mail", placeholder: "pelda@gmail.com", type: "email", autocomplete: "email", value: val("email") },
-            { key: "plate", label: "Rendszám", placeholder: "AA-BB-123", type: "text", value: val("plate"), optional: true,
+            { key: "plate", label: "Rendszám (nem kötelező)", placeholder: "AA-BB-123", type: "text", value: val("plate"), optional: true,
               sample: samplePlate(), sampleLabel: "Minta rendszám" },
-            { key: "when_pref", label: "Mikor jó behozni?", type: "select", options: WHEN_PREF, value: val("when_pref"), optional: true },
-            { key: "when_note", label: "Mikortól? (nem kötelező)", placeholder: "pl. jövő hét kedd után", type: "text", value: val("when_note"), optional: true },
+            { key: "when_pref", label: "Mikor jó behozni? (nem kötelező)", type: "select", options: WHEN_PREF, value: val("when_pref"), optional: true },
         ],
     };
 }
@@ -451,10 +456,10 @@ function validateContactForm(contact) {
     else if (name.length < 2) errors.name = "Kérlek, a teljes nevedet add meg.";
     else values.name = name;
 
+    // No longer asked for, but a value arriving from an older client is still
+    // accepted rather than dropped.
     const phone = get("phone");
-    if (!phone) errors.phone = REQ;
-    else if (phoneIssue(phone)) errors.phone = "Ezt a számot nem sikerült értelmezni (pl. +36 30 123 4567).";
-    else values.phone = phone;
+    if (phone && !phoneIssue(phone)) values.phone = phone;
 
     const email = get("email");
     if (!email) errors.email = REQ;
@@ -617,7 +622,7 @@ function leadForm(sel) {
         submit: "Érdekel, mutasd meg",
         fields: [
             { key: "lead_name", label: "Neved", placeholder: "pl. Kovács Zoltán", type: "text", value: "", optional: true },
-            { key: "lead_contact", label: "Hol érlek el?", placeholder: "telefon vagy e-mail", type: "text", value: "", optional: true },
+            { key: "lead_contact", label: "Hol érlek el?", placeholder: "e-mail cím (vagy telefon, ha úgy jobb)", type: "text", value: "", optional: true },
             { key: "lead_shop", label: "Szerviz neve, helye (nem kötelező)", placeholder: "pl. Kovács Autószerviz, Debrecen", type: "text", value: "", optional: true },
         ],
     };
@@ -768,7 +773,7 @@ function renderOwnerCard(q, sel) {
     const contact = [sel.name, sel.phone, sel.email].filter(Boolean).map(oneLine).join(" · ");
     rows.push(contact
         ? `• Ügyfél: **${contact}**`
-        : `• Ügyfél: *ide kerülne a neve és a telefonszáma - most nem kértem el, mert ez csak egy teszt*`);
+        : `• Ügyfél: *ide kerülne a neve és az elérhetősége*`);
     return rows.join("\n");
 }
 
@@ -848,7 +853,7 @@ Kizárólag egyetlen JSON objektumot írj, semmi mást: {"valasz": "<az ügyfél
 A "valasz" szövegében használhatsz **félkövért** és "• " kezdetű felsorolást, de a választási lehetőségeket SOHA ne sorold fel - a gombokat a rendszer mutatja.`;
     if (mode === "form" || mode === "done") {
         const situation = mode === "form"
-            ? "Az ügyfél minden kérdésre válaszolt; a képernyőn egy rövid űrlap vár a nevére, telefonszámára és e-mail címére. Válaszolj röviden az üzenetére, majd kérd meg, hogy töltse ki az űrlapot - utána azonnal látja az árat."
+            ? "Az ügyfél már látta az árat; a képernyőn egy rövid űrlap kéri a nevét és az e-mail címét. Telefonszámot NEM kérünk. Válaszolj röviden az üzenetére, majd kérd meg, hogy töltse ki."
             : "Az árajánlat már elkészült, az ügyfél látta. Válaszolj röviden a kérdésére. Új árat ne adj; ha a munkán változtatna, mondd, hogy ezt a szerviz a helyszínen pontosítja.";
         return head + `\n=== HELYZET ===\n${situation}` + format + `\nAz "ertek" mindig null.`;
     }
@@ -1069,9 +1074,9 @@ const priceReady = (sel) => !FLOW.blocked(sel) && !pendingField(sel);
 // goes straight to the PRICE - the contact form no longer stands between the
 // customer and the number they came for.
 async function advance(sel, history, response, sessionId, prefix = "") {
-    if (priceReady(sel) && !(ASK_CONTACT && !contactReady(sel))) {
-        return await finishQuote(sel, history, response, sessionId, prefix);
-    }
+    // The price is never behind the contact form. When details are asked for at
+    // all, they are asked AFTER the number is on screen - see ASK_CONTACT.
+    if (priceReady(sel)) return await finishQuote(sel, history, response, sessionId, prefix);
     const step = nextStep(sel);
     return send(response, sel, prefix + step.text, step.key);
 }
@@ -1217,7 +1222,12 @@ export default async function handler(request, response) {
                 });
             }
             sel = { ...sel, ...res.values };
-            return await finishQuote(sel, history, response, body.sessionId);
+            // One set of details per person per day. Pricing another car is
+            // fine and encouraged - that is what the restart button is for -
+            // but the same person's name and e-mail should not arrive five
+            // times, and one tester should not refill the inbox.
+            const fresh = rateLimit(`lead:${ip}`, RL_LEAD.limit, RL_LEAD.windowMs).ok;
+            return await finishQuote(sel, history, response, body.sessionId, "", fresh);
         }
 
         const text = typeof question === "string" ? question.trim() : "";
@@ -1316,7 +1326,7 @@ function pickContact(c) {
 //  Deliver the finished quote: the customer's bubbles, the owner's card, the
 //  arithmetic panel and the feedback form, plus the owner e-mail.
 // ---------------------------------------------------------------------------
-async function finishQuote(sel, history, response, sessionId, prefix = "") {
+async function finishQuote(sel, history, response, sessionId, prefix = "", emailLead = false) {
     const quote = assembleQuote(sel);
     // Only the customer's own bubbles go in `answer`. Everything the PROTOTYPE
     // adds - the workshop's card, the live-version note, the feedback form -
@@ -1337,9 +1347,24 @@ async function finishQuote(sel, history, response, sessionId, prefix = "") {
         ...(Array.isArray(history) ? history : []),
         { role: "assistant", content: [answer, owner].join("\n\n") },
     ];
-    if (EMAIL_QUOTES) {
+    // Mailed when somebody actually handed over their details (once per person
+    // per day), or always in a real workshop where every quote is a lead.
+    if (emailLead || EMAIL_QUOTES) {
         const delivery = sendQuoteEmail(sel, quote, transcript).catch(() => {});
         if (hasVercelWaitUntil()) waitUntil(delivery); else if (process.env.VERCEL) await delivery;
+    }
+
+    // Stage one: the number, and only then the question of who it is for. The
+    // workshop's card waits until there is a name to put on it.
+    if (ASK_CONTACT && !contactReady(sel)) {
+        return response.status(200).json({
+            answer: prefix + answer,
+            chips: [],
+            state: sel,
+            ...progressOf(sel),
+            scope: scopePanel(quote),
+            form: contactForm(sel),
+        });
     }
 
     return response.status(200).json({
