@@ -2,108 +2,172 @@
 <html lang="hu">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Automata árajánlatkészítő - minta autószervizeknek</title>
   <meta name="description" content="Prototípus: egy chat, ami végigkérdezi az autóst, és tételes javítási árat ad. Minta árakkal fut." />
   <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#16191D" />
   <style>
+    /* ------------------------------------------------------------------
+       MOBILE FIRST. This link gets opened in a Facebook group, which means
+       a phone, in one hand, with a thumb. Every base rule below is the
+       phone rule; the desktop ones sit behind a min-width query at the end.
+       ------------------------------------------------------------------ */
     :root {
       --ink: #16191D;
+      --ink-soft: #3A4046;
       --muted: #5C6268;
       --line: #E4E2DE;
       --amber: #F59E0B;
-      --amber-ink: #92590A;
+      --amber-ink: #8A5309;
+      --amber-bg: #FFFBF0;
+      --amber-line: #F0D69B;
       --bg: #FBFAF8;
       --card: #FFFFFF;
     }
     * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
     html, body { margin: 0; padding: 0; }
     body {
       background: var(--bg);
       color: var(--ink);
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       -webkit-font-smoothing: antialiased;
-      line-height: 1.55;
+      font-size: 16px;
+      line-height: 1.6;
     }
-    .wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 140px; }
+
+    /* 16px gutters, and room at the bottom so the floating chat button never
+       sits on top of the last line of text. */
+    .wrap {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 22px 16px calc(120px + env(safe-area-inset-bottom));
+    }
 
     .eyebrow {
       display: inline-block;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 700;
-      letter-spacing: .08em;
+      letter-spacing: .07em;
       text-transform: uppercase;
       color: var(--amber-ink);
       background: #FFF7E6;
-      border: 1px solid #F6DFAE;
+      border: 1px solid var(--amber-line);
       border-radius: 999px;
-      padding: 5px 12px;
-      margin-bottom: 14px;
+      padding: 5px 11px;
+      margin: 0 0 16px;
     }
-    h1 { font-size: 30px; line-height: 1.22; margin: 0 0 12px; letter-spacing: -.02em; }
-    .lead { font-size: 17px; color: #3A4046; margin: 0 0 22px; }
 
-    /* The sample-data notice sits ABOVE the chat, not in small print. Without
-       it one wrong number reads as "ez baromság" instead of "ez minta adat". */
+    /* Scales with the viewport instead of jumping at one breakpoint. */
+    h1 {
+      font-size: clamp(26px, 7.2vw, 38px);
+      line-height: 1.18;
+      letter-spacing: -.022em;
+      margin: 0 0 14px;
+      text-wrap: balance;
+    }
+    .lead {
+      font-size: clamp(16px, 4.3vw, 18px);
+      line-height: 1.6;
+      color: var(--ink-soft);
+      margin: 0 0 24px;
+    }
+    .lead b { font-weight: 650; color: var(--ink); }
+
+    /* A thumb-sized target: full width on a phone, hugging on a desktop. */
+    .cta {
+      display: block;
+      width: 100%;
+      margin: 0 0 26px;
+      padding: 16px 22px;
+      border: 0;
+      border-radius: 14px;
+      background: var(--ink);
+      color: #fff;
+      font: inherit;
+      font-size: 17px;
+      font-weight: 650;
+      line-height: 1.2;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .cta:active { transform: translateY(1px); }
+
+    /* The sample-price notice, above the chat and not in small print. */
     .notice {
-      border: 1px solid #F0D69B;
-      background: #FFFBF0;
+      border: 1px solid var(--amber-line);
       border-left: 4px solid var(--amber);
-      border-radius: 10px;
-      padding: 14px 16px;
+      background: var(--amber-bg);
+      border-radius: 12px;
+      padding: 15px 16px;
       margin: 0 0 22px;
       font-size: 15px;
+      line-height: 1.58;
     }
-    .notice b { display: block; margin-bottom: 3px; }
+    /* Only the opening phrase is a heading. Every other <b> in here is an
+       inline emphasis and must stay on its own line's flow - making them all
+       blocks shattered this box into five ragged lines. */
+    .notice > strong:first-child {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 15.5px;
+    }
 
     .card {
       background: var(--card);
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 18px 18px 6px;
-      margin: 0 0 18px;
+      border-radius: 16px;
+      padding: 18px 16px;
+      margin: 0 0 20px;
     }
-    .card h2 { font-size: 16px; margin: 0 0 10px; letter-spacing: -.01em; }
-    ol, ul { margin: 0 0 14px; padding-left: 20px; }
-    li { margin-bottom: 7px; }
-    .muted { color: var(--muted); font-size: 14px; }
-
-    .cta {
-      margin: 0 0 22px;
-      display: inline-flex; align-items: center; gap: 8px;
-      background: var(--ink); color: #fff; border: 0;
-      border-radius: 999px; padding: 13px 22px;
-      font: inherit; font-weight: 650; cursor: pointer;
+    .card h2 {
+      font-size: 16.5px;
+      line-height: 1.35;
+      letter-spacing: -.01em;
+      margin: 0 0 12px;
     }
-    .cta:hover { background: #2A2F36; }
+    .card ul { margin: 0 0 14px; padding-left: 20px; }
+    .card li { margin: 0 0 10px; line-height: 1.55; }
+    .card li:last-child { margin-bottom: 0; }
+    .muted {
+      color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.6;
+      margin: 14px 0 0;
+    }
 
     footer {
-      margin-top: 28px; padding-top: 18px;
+      margin-top: 26px;
+      padding-top: 18px;
       border-top: 1px solid var(--line);
-      font-size: 14px; color: var(--muted);
+      font-size: 14.5px;
+      line-height: 1.7;
+      color: var(--muted);
     }
     footer a { color: var(--amber-ink); }
 
-    @media (max-width: 420px) {
-      h1 { font-size: 25px; }
-      .wrap { padding-top: 20px; }
+    @media (min-width: 620px) {
+      .wrap { padding-top: 40px; }
+      .cta { display: inline-block; width: auto; }
+      .card { padding: 22px 22px; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <span class="eyebrow">Prototípus · 2 perc</span>
-    <h1>Az ügyfél megkérdezi, mennyibe kerül.<br>Ez válaszol helyetted.</h1>
+    <h1>Az ügyfél megkérdezi, mennyibe kerül. Ez válaszol helyetted.</h1>
     <p class="lead">
-      Végigkérdezi az autóst - milyen autó, milyen motor, mi a munka - és <b>tételes árat ad</b>,
-      a munkadíjat és az alkatrészt külön kiírva. Ha a baj csak tünet, <b>nem talál ki árat</b>,
-      hanem diagnosztikát ajánl. Te a kész ajánlatot kapod meg, az ügyfél adataival.
+      Végigkérdezi az autóst, és <b>tételes árat ad</b> - a munkadíjat és az alkatrészt külön
+      kiírva. Ha a baj csak tünet, <b>nem talál ki árat</b>, hanem diagnosztikát ajánl.
+      Te a kész ajánlatot kapod meg, az ügyfél adataival.
     </p>
 
     <button class="cta" data-quote-agent type="button">Kipróbálom</button>
 
     <div class="notice">
-      <b>Minta árakkal fut.</b>
+      <strong>Minta árakkal fut.</strong>
       A 2026-os magyar piac átlagaival számol, nem egy konkrét szerviz katalógusából.
       Élesben a <b>te óradíjad</b> és a <b>te beszerzési árad</b> menne bele.
     </div>
@@ -113,7 +177,7 @@
       <ul>
         <li>Kérj árat egy munkára, amit sokszor csinálsz. <b>Mennyire lő mellé?</b></li>
         <li>Írd be, hogy <i>„valami furcsa hangot ad”</i>. Árat nem adhat rá, csak diagnosztikát.</li>
-        <li>Nyisd le a <b>„Miből jött ki ez az ár?”</b> panelt - ott a normaidő, az óradíj, az alkatrészár.</li>
+        <li>Nyisd le a <b>„Miből jött ki ez az ár?”</b> panelt - ott a normaidő, az óradíj és az alkatrészár.</li>
       </ul>
       <p class="muted">
         Nincs regisztráció. Az alvázszámhoz és a rendszámhoz van „minta” gomb, nem kell a sajátodat
@@ -122,8 +186,8 @@
     </div>
 
     <footer>
-      Készítette: <a href="https://landscale.agency/hu" target="_blank" rel="noopener"><b>Landscale Agency</b></a>
-      · Kérdés, ötlet, kritika: <a href="tel:+36702501739">+36 70 250 1739</a>
+      Készítette: <a href="https://landscale.agency/hu" target="_blank" rel="noopener">Landscale Agency</a><br>
+      Kérdés, ötlet, kritika: <a href="tel:+36702501739">+36 70 250 1739</a>
     </footer>
   </div>
 

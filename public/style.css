@@ -603,7 +603,23 @@ select.faq-form-input { appearance: auto; }
   .faq-bubble { max-width: 88%; font-size: 15px; }
   .faq-chips, .faq-form { margin-left: 0; }
   .faq-form { max-width: none; }
+  /* 16px inputs stop iOS zooming in when a field is focused. */
   .faq-form-input { font-size: 16px; }
+
+  /* The panels added for the prototype were indented to line up with the bot
+     avatar on a desktop bubble. On a phone that indent is a quarter of the
+     screen, which is what made the ending feel cramped. */
+  .faq-workings, .faq-live, .faq-owner {
+    margin-left: 8px;
+    margin-right: 8px;
+  }
+  .faq-divider { margin-left: 8px; margin-right: 8px; }
+  .faq-divider-sub { margin-left: 8px; margin-right: 8px; }
+  .faq-owner, .faq-live { padding: 13px 14px; }
+  .faq-workings > summary { padding: 12px 13px; }
+  .faq-combo-item { padding: 13px 13px; font-size: 16px; }
+  .faq-combo-list { max-height: 44vh; }
+  .faq-form-sample { padding: 8px 12px; font-size: 13px; }
 }
 @media (max-height: 480px) and (max-width: 900px) {
   .faq-chat-window { top: 8px; bottom: 8px; height: auto; }
@@ -793,3 +809,27 @@ textarea.faq-form-input { min-height: 72px; resize: vertical; }
 }
 .faq-workings.faq-scope > summary { color: var(--bc-ink); }
 .faq-workings.faq-scope li { margin-bottom: 7px; }
+
+/* --------------------------------------------------------------------------
+   MOBILE OVERRIDES - deliberately the LAST block in this file.
+   The prototype panels above are defined after the original @media block, so
+   rules inside that earlier block lose the cascade to them. Anything that has
+   to win on a phone belongs here, at the bottom.
+   -------------------------------------------------------------------------- */
+@media (max-width: 600px) {
+  /* These were indented to line up with the bot avatar on a desktop bubble.
+     On a 390px screen that indent is a sixth of the width. */
+  .faq-workings { margin: 8px 8px 10px; }
+  .faq-live { margin: 10px 8px 12px; }
+  .faq-owner { margin: 0 8px 10px; padding: 13px 14px; }
+  .faq-divider { margin: 20px 8px 4px; }
+  .faq-divider-sub { margin: 0 8px 10px; }
+
+  .faq-workings > summary { padding: 12px 13px; }
+  .faq-workings ul { padding: 0 14px 10px 26px; }
+  .faq-combo-item { padding: 13px; font-size: 16px; }
+  .faq-combo-list { max-height: 44vh; }
+  .faq-form-sample { padding: 9px 13px; font-size: 13px; }
+  /* A comfortable thumb target on the one button every conversation ends on. */
+  .faq-form-submit { padding: 15px 18px; font-size: 16px; }
+}
