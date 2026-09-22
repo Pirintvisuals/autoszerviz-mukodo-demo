@@ -630,6 +630,42 @@
     scrollToBottom();
   }
 
+  // One tap, directly under the price. The full feedback form opens only
+  // after somebody has already answered once.
+  function renderQuick(q) {
+    const box = document.createElement("div");
+    box.className = "faq-quick";
+    const t = document.createElement("div");
+    t.className = "faq-quick-title";
+    t.textContent = q.question || "";
+    box.appendChild(t);
+    const row = document.createElement("div");
+    row.className = "faq-quick-row";
+    (q.chips || []).forEach((label) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "faq-quick-chip";
+      b.textContent = label;
+      b.onclick = () => {
+        if (sending) return;
+        box.remove();
+        addMessage("user", label);
+        conversationHistory.push({ role: "user", content: label });
+        post({ feedback: { fb_verdict: label }, history: conversationHistory, state: convState }, true);
+      };
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+    if (q.note) {
+      const nt = document.createElement("div");
+      nt.className = "faq-quick-note";
+      nt.textContent = q.note;
+      box.appendChild(nt);
+    }
+    messagesContainer.appendChild(box);
+    scrollToBottom();
+  }
+
   function clearContactForm() {
     if (formEl) { formEl.remove(); formEl = null; }
   }
@@ -953,6 +989,7 @@
       parts.forEach((p) => addMessage("bot", p));
       if (parts.length) conversationHistory.push({ role: "assistant", content: parts.join("\n\n") });
 
+      if (data.quick) renderQuick(data.quick);
       if (data.scope) renderWorkings(data.scope, "faq-scope");
       if (data.demo) renderDemo(data.demo);
       if (data.form) renderContactForm(data.form);

@@ -396,6 +396,24 @@ const ASK_CONTACT = (process.env.ASK_CONTACT || "").toLowerCase() === "on";
 const RESTART_CHIP = "Másik autóra is kérek árat";
 const isRestart = (text) => norm(text) === norm(RESTART_CHIP);
 
+// Whether a finished quote is e-mailed.
+//
+// OFF by default. On the first day in a Facebook group this sent 25 quotes and
+// hit the daily sending quota by teatime - and not one of them was a lead,
+// because the prototype deliberately does not collect contact details. They
+// were telemetry, and telemetry does not belong in an inbox. A real workshop
+// turns it on with EMAIL_QUOTES=on, where every quote IS a lead.
+// Mechanic feedback is always e-mailed: it is rare and it is the whole point.
+const EMAIL_QUOTES = (process.env.EMAIL_QUOTES || "").toLowerCase() === "on";
+
+// The one-tap verdict shown directly under the price.
+//
+// 25 people got a price on day one and not one filled in the feedback form,
+// which sat at the bottom behind the workshop card and two panels. They got
+// the number they came for and left. A single row of buttons under the price
+// asks for one tap instead of three fields.
+const QUICK_VERDICTS = ["Jó az ár", "Sok", "Kevés", "Kevés a kérdés"];
+
 // A plausible but deliberately fake plate for the prototype's fill button. PR-OT
 // is not a live Hungarian series, so it reads as a sample to anyone who knows
 // plates, while still being the right shape.
@@ -1096,9 +1114,18 @@ export default async function handler(request, response) {
             const delivery = sendFeedbackEmail(sel, history, { sessionId: body.sessionId }).catch(() => {});
             if (hasVercelWaitUntil()) waitUntil(delivery); else await delivery;
             console.log("VISSZAJELZÉS:", JSON.stringify(fb));
+            // A one-tap verdict is the opening, not the end: having answered
+            // once, people finish the sentence far more often than they start it.
+            if (fb.fb_verdict && !fb.fb_price && !fb.fb_text) {
+                return response.status(200).json({
+                    answer: "Kösz. **Mennyiért csinálnád meg nálad?** Ez a leghasznosabb, amit mondhatsz - egy szám is elég.",
+                    chips: [RESTART_CHIP], state: sel, ...progressOf(sel),
+                    form: feedbackForm(sel),
+                });
+            }
             return send(response, sel,
                 "Köszönöm, ez tényleg sokat segít. Ha van még, amit hozzátennél, írd le ide nyugodtan.",
-                null, { feedbackDone: true });
+                RESTART_CHIP ? null : null, { feedbackDone: true, chips: [RESTART_CHIP] });
         }
 
         // --- A one-screen group form submitted (the car, or the job details). ---
@@ -1257,8 +1284,10 @@ async function finishQuote(sel, history, response, sessionId, prefix = "") {
         ...(Array.isArray(history) ? history : []),
         { role: "assistant", content: [answer, owner].join("\n\n") },
     ];
-    const delivery = sendQuoteEmail(sel, quote, transcript).catch(() => {});
-    if (hasVercelWaitUntil()) waitUntil(delivery); else if (process.env.VERCEL) await delivery;
+    if (EMAIL_QUOTES) {
+        const delivery = sendQuoteEmail(sel, quote, transcript).catch(() => {});
+        if (hasVercelWaitUntil()) waitUntil(delivery); else if (process.env.VERCEL) await delivery;
+    }
 
     return response.status(200).json({
         answer: prefix + answer,
@@ -1269,6 +1298,11 @@ async function finishQuote(sel, history, response, sessionId, prefix = "") {
         done: true,
         ...progressOf(sel),
         scope: scopePanel(quote),
+        quick: {
+            question: "Szerelő vagy? Stimmel ez az ár?",
+            note: "Egy koppintás, és utána leírhatod, mennyiért csinálnád meg nálad.",
+            chips: QUICK_VERDICTS,
+        },
         // Everything below the divider is the demo talking, not the quote.
         demo: {
             divider: "Eddig tart, amit egy ügyfél lát.",
