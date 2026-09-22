@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Automata árajánlatkészítő - minta autószervizeknek</title>
+  <meta name="description" content="Prototípus: egy chat, ami végigkérdezi az autóst, és tételes javítási árat ad. Minta árakkal fut." />
+  <meta name="robots" content="noindex" />
+  <style>
+    :root {
+      --ink: #16191D;
+      --muted: #5C6268;
+      --line: #E4E2DE;
+      --amber: #F59E0B;
+      --amber-ink: #92590A;
+      --bg: #FBFAF8;
+      --card: #FFFFFF;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.55;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 140px; }
+
+    .eyebrow {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--amber-ink);
+      background: #FFF7E6;
+      border: 1px solid #F6DFAE;
+      border-radius: 999px;
+      padding: 5px 12px;
+      margin-bottom: 14px;
+    }
+    h1 { font-size: 29px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; }
+    .lead { font-size: 17px; color: #3A4046; margin: 0 0 22px; }
+
+    /* The sample-data notice sits ABOVE the chat, not in small print. Without
+       it one wrong number reads as "ez baromság" instead of "ez minta adat". */
+    .notice {
+      border: 1px solid #F0D69B;
+      background: #FFFBF0;
+      border-left: 4px solid var(--amber);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin: 0 0 22px;
+      font-size: 15px;
+    }
+    .notice b { display: block; margin-bottom: 3px; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px 18px 6px;
+      margin: 0 0 18px;
+    }
+    .card h2 { font-size: 16px; margin: 0 0 10px; letter-spacing: -.01em; }
+    ol, ul { margin: 0 0 14px; padding-left: 20px; }
+    li { margin-bottom: 7px; }
+    .muted { color: var(--muted); font-size: 14px; }
+
+    .cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--ink); color: #fff; border: 0;
+      border-radius: 999px; padding: 13px 22px;
+      font: inherit; font-weight: 650; cursor: pointer;
+    }
+    .cta:hover { background: #2A2F36; }
+
+    footer {
+      margin-top: 28px; padding-top: 18px;
+      border-top: 1px solid var(--line);
+      font-size: 14px; color: var(--muted);
+    }
+    footer a { color: var(--amber-ink); }
+
+    @media (max-width: 420px) {
+      h1 { font-size: 25px; }
+      .wrap { padding-top: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="eyebrow">Prototípus</span>
+    <h1>Automata árajánlatkészítő autószervizeknek</h1>
+    <p class="lead">
+      Az autós leírja, mi a baja. A rendszer végigkérdezi, ami az árhoz tényleg kell - autó, motor,
+      alvázszám, alkatrész-kategória - és a végén tételes becslést ad. Ha a baj csak tünet, nem ad
+      árat, hanem diagnosztikát ajánl.
+    </p>
+
+    <div class="notice">
+      <b>Minta árakkal fut.</b>
+      Nem egy konkrét szerviz katalógusából dolgozik: a 2026-os magyar piac átlagaival számol.
+      Éles verzióban a szerviz saját alkatrészárai és óradíja alapján számol.
+    </div>
+
+    <div class="card">
+      <h2>Szerelő vagy? Próbáld meg eltörni.</h2>
+      <ul>
+        <li>Kérj árat olyan munkára, amit te is sokszor csinálsz, és nézd meg, mennyire lő mellé.</li>
+        <li>Nyisd le az ár alatt a <b>„Miből jött ki ez az ár?”</b> panelt: ott van a normaidő, az óradíj és az alkatrészár, amiből számolt.</li>
+        <li>Írd be, hogy „valami furcsa hangot ad” - és nézd meg, hogy árat ad-e rá. Nem szabad.</li>
+        <li>Kérj egyszerre két munkát, vagy adj meg olyan autót, ami nincs a listában.</li>
+        <li>Az ár alatt ott van az is, hogy <b>mit tudna ez élesben</b>, a te óradíjaddal és a te beszállítói áraiddal - és mit nem tud most.</li>
+        <li>A végén ott a visszajelzés: <b>hol téved, és mennyiért csinálnád meg nálad.</b> Ez a leghasznosabb, amit mondhatsz.</li>
+      </ul>
+      <p class="muted">
+        Nincs regisztráció és nincs e-mail-kapu. Az adatok, amiket beírsz, csak azt mutatják meg,
+        mit kapna meg a szerviz - hívni senki nem fog. Az alvázszámhoz és a rendszámhoz van
+        „minta” gomb, nem kell a sajátodat beírnod.
+      </p>
+    </div>
+
+    <button class="cta" data-quote-agent type="button">Indítsd el a beszélgetést</button>
+
+    <footer>
+      Készítette: <b>Landscale Agency</b> · Kérdés, ötlet, kritika:
+      <a href="tel:+36702501739">+36 70 250 1739</a>
+    </footer>
+  </div>
+
+  <script src="widget.js"></script>
+</body>
+</html>
