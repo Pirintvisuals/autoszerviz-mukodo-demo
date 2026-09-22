@@ -40,7 +40,7 @@
       padding: 5px 12px;
       margin-bottom: 14px;
     }
-    h1 { font-size: 29px; line-height: 1.2; margin: 0 0 10px; letter-spacing: -.02em; }
+    h1 { font-size: 30px; line-height: 1.22; margin: 0 0 12px; letter-spacing: -.02em; }
     .lead { font-size: 17px; color: #3A4046; margin: 0 0 22px; }
 
     /* The sample-data notice sits ABOVE the chat, not in small print. Without
@@ -69,6 +69,7 @@
     .muted { color: var(--muted); font-size: 14px; }
 
     .cta {
+      margin: 0 0 22px;
       display: inline-flex; align-items: center; gap: 8px;
       background: var(--ink); color: #fff; border: 0;
       border-radius: 999px; padding: 13px 22px;
@@ -91,42 +92,38 @@
 </head>
 <body>
   <div class="wrap">
-    <span class="eyebrow">Prototípus</span>
-    <h1>Automata árajánlatkészítő autószervizeknek</h1>
+    <span class="eyebrow">Prototípus · 2 perc</span>
+    <h1>Az ügyfél megkérdezi, mennyibe kerül.<br>Ez válaszol helyetted.</h1>
     <p class="lead">
-      Az autós leírja, mi a baja. A rendszer végigkérdezi, ami az árhoz tényleg kell - autó, motor,
-      alvázszám, alkatrész-kategória - és a végén tételes becslést ad. Ha a baj csak tünet, nem ad
-      árat, hanem diagnosztikát ajánl.
+      Végigkérdezi az autóst - milyen autó, milyen motor, mi a munka - és <b>tételes árat ad</b>,
+      a munkadíjat és az alkatrészt külön kiírva. Ha a baj csak tünet, <b>nem talál ki árat</b>,
+      hanem diagnosztikát ajánl. Te a kész ajánlatot kapod meg, az ügyfél adataival.
     </p>
+
+    <button class="cta" data-quote-agent type="button">Kipróbálom</button>
 
     <div class="notice">
       <b>Minta árakkal fut.</b>
-      Nem egy konkrét szerviz katalógusából dolgozik: a 2026-os magyar piac átlagaival számol.
-      Éles verzióban a szerviz saját alkatrészárai és óradíja alapján számol.
+      A 2026-os magyar piac átlagaival számol, nem egy konkrét szerviz katalógusából.
+      Élesben a <b>te óradíjad</b> és a <b>te beszerzési árad</b> menne bele.
     </div>
 
     <div class="card">
       <h2>Szerelő vagy? Próbáld meg eltörni.</h2>
       <ul>
-        <li>Kérj árat olyan munkára, amit te is sokszor csinálsz, és nézd meg, mennyire lő mellé.</li>
-        <li>Nyisd le az ár alatt a <b>„Miből jött ki ez az ár?”</b> panelt: ott van a normaidő, az óradíj és az alkatrészár, amiből számolt.</li>
-        <li>Írd be, hogy „valami furcsa hangot ad” - és nézd meg, hogy árat ad-e rá. Nem szabad.</li>
-        <li>Kérj egyszerre két munkát, vagy adj meg olyan autót, ami nincs a listában.</li>
-        <li>Az ár alatt ott van az is, hogy <b>mit tudna ez élesben</b>, a te óradíjaddal és a te beszállítói áraiddal - és mit nem tud most.</li>
-        <li>A végén ott a visszajelzés: <b>hol téved, és mennyiért csinálnád meg nálad.</b> Ez a leghasznosabb, amit mondhatsz.</li>
+        <li>Kérj árat egy munkára, amit sokszor csinálsz. <b>Mennyire lő mellé?</b></li>
+        <li>Írd be, hogy <i>„valami furcsa hangot ad”</i>. Árat nem adhat rá, csak diagnosztikát.</li>
+        <li>Nyisd le a <b>„Miből jött ki ez az ár?”</b> panelt - ott a normaidő, az óradíj, az alkatrészár.</li>
       </ul>
       <p class="muted">
-        Nincs regisztráció és nincs e-mail-kapu. Az adatok, amiket beírsz, csak azt mutatják meg,
-        mit kapna meg a szerviz - hívni senki nem fog. Az alvázszámhoz és a rendszámhoz van
-        „minta” gomb, nem kell a sajátodat beírnod.
+        Nincs regisztráció. Az alvázszámhoz és a rendszámhoz van „minta” gomb, nem kell a sajátodat
+        beírnod. A végén egy kérdés: <b>mennyiért csinálnád meg nálad?</b> Az a legtöbb, amit adhatsz.
       </p>
     </div>
 
-    <button class="cta" data-quote-agent type="button">Indítsd el a beszélgetést</button>
-
     <footer>
-      Készítette: <b>Landscale Agency</b> · Kérdés, ötlet, kritika:
-      <a href="tel:+36702501739">+36 70 250 1739</a>
+      Készítette: <a href="https://landscale.agency/hu" target="_blank" rel="noopener"><b>Landscale Agency</b></a>
+      · Kérdés, ötlet, kritika: <a href="tel:+36702501739">+36 70 250 1739</a>
     </footer>
   </div>
 

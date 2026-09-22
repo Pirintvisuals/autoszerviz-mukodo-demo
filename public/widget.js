@@ -600,6 +600,36 @@
     scrollToBottom();
   }
 
+  // The line that separates the customer's quote from the demo underneath it.
+  function renderDivider(text, sub) {
+    const d = document.createElement("div");
+    d.className = "faq-divider";
+    const t = document.createElement("span");
+    t.className = "faq-divider-text";
+    t.textContent = text;
+    d.appendChild(t);
+    messagesContainer.appendChild(d);
+    if (sub) {
+      const p = document.createElement("div");
+      p.className = "faq-divider-sub";
+      p.textContent = sub;
+      messagesContainer.appendChild(p);
+    }
+  }
+
+  function renderDemo(demo) {
+    renderDivider(demo.divider, demo.intro);
+    if (demo.owner) {
+      const card = document.createElement("div");
+      card.className = "faq-owner";
+      card.innerHTML = renderMarkdown(demo.owner);
+      messagesContainer.appendChild(card);
+    }
+    if (demo.workings) renderWorkings(demo.workings);
+    if (demo.live) renderLive(demo.live);
+    scrollToBottom();
+  }
+
   function clearContactForm() {
     if (formEl) { formEl.remove(); formEl = null; }
   }
@@ -923,8 +953,8 @@
       parts.forEach((p) => addMessage("bot", p));
       if (parts.length) conversationHistory.push({ role: "assistant", content: parts.join("\n\n") });
 
-      if (data.workings) renderWorkings(data.workings);
-      if (data.live) renderLive(data.live);
+      if (data.scope) renderWorkings(data.scope, "faq-scope");
+      if (data.demo) renderDemo(data.demo);
       if (data.form) renderContactForm(data.form);
       else if (data.multi) renderMultiChips(data.chips, data.exclusive, data.next);
       else renderChips(data.chips);

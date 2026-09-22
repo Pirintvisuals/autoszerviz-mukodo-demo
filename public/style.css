@@ -744,3 +744,52 @@ textarea.faq-form-input { min-height: 72px; resize: vertical; }
   font-size: 12.5px;
   color: #A7ABB1;
 }
+
+/* --- Where the customer's quote stops and the demo starts ----------------- */
+.faq-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 12px 4px;
+  color: var(--bc-muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.faq-divider::before,
+.faq-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--bc-border);
+}
+.faq-divider-sub {
+  margin: 0 12px 10px;
+  text-align: center;
+  color: var(--bc-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* The workshop's job card. Not a chat bubble - it is a document. */
+.faq-owner {
+  margin: 0 12px 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--bc-border);
+  border-radius: 14px;
+  background: #fff;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.faq-owner p:first-child { margin-top: 0; }
+.faq-owner p:last-child { margin-bottom: 0; }
+
+/* The small print, folded. Same mechanics as the arithmetic panel, quieter. */
+.faq-workings.faq-scope {
+  border-style: solid;
+  border-color: var(--bc-border);
+  background: #fff;
+}
+.faq-workings.faq-scope > summary { color: var(--bc-ink); }
+.faq-workings.faq-scope li { margin-bottom: 7px; }

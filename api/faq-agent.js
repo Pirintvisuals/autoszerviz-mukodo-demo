@@ -551,11 +551,13 @@ function feedbackForm(sel) {
         title: "Szerelő vagy? Hol téved?",
         why: "Ez egy prototípus, minta árakkal. Ha látsz benne hülyeséget, az a leghasznosabb, amit mondhatsz.",
         submit: "Elküldöm",
+        // Two questions, not four. The one that matters is the price: it is the
+        // only answer that both calibrates the model AND tells you the person
+        // giving it actually prices cars for a living.
         fields: [
-            { key: "fb_verdict", label: "Egy szóban", type: "select", options: FB_VERDICT, value: "", optional: true },
             { key: "fb_price", label: "Mennyiért csinálnád meg nálad ezt a munkát?", placeholder: "pl. 85 000 Ft", type: "text", value: "", optional: true },
             { key: "fb_text", label: "Hol téved, mit kérdeztél volna még?", placeholder: "Írd le nyugodtan", type: "textarea", value: "", optional: true },
-            { key: "fb_role", label: "Te ki vagy?", type: "select", options: FB_ROLE, value: "", optional: true },
+            { key: "fb_verdict", label: "Egy szóban", type: "select", options: FB_VERDICT, value: "", optional: true },
         ],
     };
 }
@@ -631,38 +633,49 @@ function renderCustomerQuote(q, sel) {
             `Tájékoztató ár. A szerviz erősíti meg, miután látta az autót.`,
         ];
 
-    const scope = [`**Mit tartalmaz?**`, `Az ár ${q.includes}.`];
-    if (q.exclusions.length) {
-        scope.push(``, `**Ami ezen felül jöhet:**`, ...q.exclusions.map((e) => `• ${e}`));
-    }
-    if (q.flags.length) scope.push(``, ...q.flags.map((f) => `**Fontos:** ${f}`));
-    if (q.expertise) scope.push(``, `**Egy tipp:** ${q.expertise}`);
+    // Only the single most important caveat goes in the bubble. The full list
+    // used to sit here - seven bullets under a finished price - and it buried
+    // the one line that actually needed reading. The rest is one tap away.
+    const lead = q.flags.length ? q.flags[0] : null;
 
-    const when = has(sel, "when_pref") && !/^mindegy/i.test(sel.when_pref) ? ` - lehetőleg **${String(sel.when_pref).toLowerCase()}**` : "";
+    const when = has(sel, "when_pref") && !/^mindegy/i.test(sel.when_pref) ? `, lehetőleg **${String(sel.when_pref).toLowerCase()}**` : "";
     const next = [
-        `**Hogyan tovább?**`,
+        lead ? `**Fontos:** ${lead}` : null,
+        lead ? `` : null,
         q.diagnosticOnly
-            ? `• Behozod az autót egy **diagnosztikára**${when}.`
-            : `• Egyeztetünk egy **időpontot**${when}.`,
-        `• A szerviz **megerősíti az árat**, mielőtt bármihez hozzányúl.`,
-        has(sel, "when_note") ? `• Amit írtál az időzítésről: **${oneLine(sel.when_note)}**` : null,
+            ? `**Hogyan tovább?** Behozod az autót egy diagnosztikára${when}, és a hibakeresés után kapsz rá tételes árat.`
+            : `**Hogyan tovább?** Egyeztetünk egy időpontot${when}. A szerviz megerősíti az árat, mielőtt bármihez hozzányúl.`,
         ``,
         `Sürgős? Hívj: **${PHONE}**`,
     ].filter((x) => x !== null).join("\n");
 
-    return [head.join("\n"), scope.join("\n"), next].join("\n[[SPLIT]]\n");
+    return [head.join("\n"), next].join("\n[[SPLIT]]\n");
+}
+
+// Everything the quote does and does not cover, folded away under one tap.
+// A finished price with seven bullets stapled under it is not a quote, it is a
+// wall - and the person reading it has already got the number they came for.
+function scopePanel(q) {
+    const lines = [`**Benne van:** az ár ${q.includes}.`];
+    for (const e of q.exclusions) lines.push(`**Ezen felül jöhet:** ${e}`);
+    for (const f of q.flags.slice(1)) lines.push(`**Fontos:** ${f}`);
+    if (q.expertise) lines.push(`**Egy tipp:** ${q.expertise}`);
+    return { title: "Mi van az árban, és mi nem?", lines };
 }
 
 // What the workshop would receive. Shown on screen because "the customer also
 // gets captured for you" is the half of the product a price alone never
 // explains - and a mechanic only believes it when he sees the card.
 function renderOwnerCard(q, sel) {
+    const vin = FLOW.vinLooksValid(sel.vin)
+        ? cleanVin(sel.vin) + (cleanVin(sel.vin) === FLOW.SAMPLE_VIN ? " (minta)" : "")
+        : "nem adta meg";
     const rows = [];
     rows.push(`**Ezt kapná meg a szerviz**`);
-    rows.push(`(ezt az ügyfél élesben nem látja - most azért mutatom, hogy lásd, mi érkezik be)`);
+    rows.push(`Ugyanez e-mailben is, a teljes beszélgetéssel.`);
     rows.push(``);
     rows.push(`• Autó: **${FLOW.carLine(sel)}**`);
-    rows.push(`• Alvázszám: **${FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : "nem adta meg"}**`);
+    rows.push(`• Alvázszám: **${vin}**`);
     if (has(sel, "km")) rows.push(`• Kilométeróra: **${labelFor("km", sel.km, sel)}**`);
     if (has(sel, "plate")) {
         rows.push(`• Rendszám: **${oneLine(sel.plate)}**${plateIsHungarian(sel.plate) ? "" : " (nem magyar rendszám)"}`);
@@ -675,8 +688,6 @@ function renderOwnerCard(q, sel) {
         rows.push(`• Mikor jó neki: **${[sel.when_pref, sel.when_note].filter(Boolean).map(oneLine).join(", ")}**`);
     }
     rows.push(`• Ügyfél: **${oneLine(sel.name)}** · ${oneLine(sel.phone)} · ${oneLine(sel.email)}`);
-    rows.push(``);
-    rows.push(`A teljes beszélgetés is megy vele, hogy a szerviz lássa, mit kérdezett az ügyfél.`);
     return rows.join("\n");
 }
 
@@ -1175,9 +1186,12 @@ function pickContact(c) {
 // ---------------------------------------------------------------------------
 async function finishQuote(sel, history, response, sessionId) {
     const quote = assembleQuote(sel);
-    const customer = renderCustomerQuote(quote, sel);
-    const owner = renderOwnerCard(quote, sel);
-    const answer = [customer, owner].join("\n[[SPLIT]]\n");
+    // Only the customer's own bubbles go in `answer`. Everything the PROTOTYPE
+    // adds - the workshop's card, the live-version note, the feedback form -
+    // is sent separately and rendered below a divider, because the single
+    // biggest complaint about the old ending was that seven blocks arrived at
+    // once with nothing saying where the quote stopped and the demo started.
+    const answer = renderCustomerQuote(quote, sel);
 
     console.log("\n========================================");
     console.log(`ÚJ ÁRAJÁNLAT - ${quote.title}`);
@@ -1186,9 +1200,10 @@ async function finishQuote(sel, history, response, sessionId) {
     console.log(`${quote.diagnosticOnly ? "Diagnosztika" : "Alapár"}: ${formatHuf(quote.total)}`);
     console.log("========================================\n");
 
+    const owner = renderOwnerCard(quote, sel);
     const transcript = [
         ...(Array.isArray(history) ? history : []),
-        { role: "assistant", content: answer },
+        { role: "assistant", content: [answer, owner].join("\n\n") },
     ];
     const delivery = sendQuoteEmail(sel, quote, transcript).catch(() => {});
     if (hasVercelWaitUntil()) waitUntil(delivery); else if (process.env.VERCEL) await delivery;
@@ -1199,8 +1214,15 @@ async function finishQuote(sel, history, response, sessionId) {
         state: sel,
         done: true,
         ...progressOf(sel),
-        workings: workingsPanel(quote),
-        live: liveVersionPanel(sel, quote),
+        scope: scopePanel(quote),
+        // Everything below the divider is the demo talking, not the quote.
+        demo: {
+            divider: "Eddig tart, amit egy ügyfél lát.",
+            intro: "Innentől azt mutatom, amit te kapnál meg szervizként.",
+            owner,
+            workings: workingsPanel(quote),
+            live: liveVersionPanel(sel, quote),
+        },
         form: feedbackForm(sel),
         lead: { title: quote.title, total: quote.total, diagnosticOnly: quote.diagnosticOnly },
     });

@@ -176,8 +176,20 @@ function checkQuote(d, ctx) {
         if (!new RegExp(`\\*\\*[\\d\\s\\u00a0]+Ft-tól\\*\\*`).test(priceBubble)) fail("hiányzik a '... Ft-tól' sor", { ctx, priceBubble });
         if (!/Tájékoztató ár/.test(priceBubble)) fail("hiányzik a 'Tájékoztató ár' címke", { ctx });
     }
-    if (!/Ezt kapná meg a szerviz/.test(d.answer)) fail("hiányzik a tulajdonosi kártya", { ctx });
-    if (!d.workings || !d.workings.lines || !d.workings.lines.length) fail("hiányzik a 'Miből jött ki' panel", { ctx });
+    // The customer's bubbles carry the price and nothing else: the workshop's
+    // card and the demo panels live under a divider, so that a tester can see
+    // where the quote stops.
+    if (/Ezt kapná meg a szerviz/.test(d.answer)) fail("a tulajdonosi kártya az ügyfél buborékjai közé került", { ctx });
+    if (!d.demo || !/Ezt kapná meg a szerviz/.test(d.demo.owner || "")) fail("hiányzik a tulajdonosi kártya", { ctx });
+    if (!d.demo.divider) fail("hiányzik az elválasztó", { ctx });
+    if (!d.demo.workings || !d.demo.workings.lines.length) fail("hiányzik a 'Miből jött ki' panel", { ctx });
+    if (!d.demo.live || !d.demo.live.lines.length) fail("hiányzik az 'élesben' kártya", { ctx });
+    if (!d.scope || !d.scope.lines.length) fail("hiányzik a 'mi van az árban' panel", { ctx });
+    // The price bubble must stay short. Itemised lines are the POINT, so they
+    // do not count - this guards against the small print creeping back in above
+    // the fold, which is what made the old ending a wall.
+    const prose = priceBubble.split("\n").filter((l) => l.trim() && !/^• /.test(l));
+    if (prose.length > 8) fail(`túl sok szöveg az ár-buborékban (${prose.length} sor)`, { ctx, prose });
     if (!d.form || d.form.action !== "feedback") fail("hiányzik a visszajelzés űrlap", { ctx });
     // A price must never appear before the customer has given their details.
     return d;
