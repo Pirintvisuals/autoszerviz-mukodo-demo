@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8" />
+  <title>OG kártya generátor</title>
+  <!--
+    Draws the Facebook/Messenger link preview card onto a canvas and hands back
+    a JPEG. Run it with tools/make-og.mjs, which opens this page, reads the
+    data URL and writes public/og.jpg.
+
+    Why a generator and not a hand-made image: the card has to be regenerated
+    whenever the headline changes, and a checked-in binary nobody can edit is
+    how a preview card ends up saying something the product stopped doing.
+  -->
+</head>
+<body style="margin:0;background:#222">
+<canvas id="c" width="1200" height="630"></canvas>
+<script>
+  const c = document.getElementById("c");
+  const x = c.getContext("2d");
+  const INK = "#16191D", AMBER = "#F59E0B", WHITE = "#FFFFFF", DIM = "#A7ABB1";
+  const F = (w, s) => `${w} ${s}px Inter, "Segoe UI", Arial, sans-serif`;
+
+  // Background
+  x.fillStyle = INK;
+  x.fillRect(0, 0, 1200, 630);
+
+  // A warm band down the left edge, so the card reads as "workshop" and not
+  // "software" at thumbnail size.
+  x.fillStyle = AMBER;
+  x.fillRect(0, 0, 14, 630);
+
+  // Badge
+  const badge = "PROTOTÍPUS · MINTA ÁRAK";
+  x.font = F(700, 19);
+  x.letterSpacing = "1.6px";
+  // Size the pill to the text rather than guessing: the label changes, and a
+  // hardcoded width is how the text ends up hanging out of its own badge.
+  const bw = x.measureText(badge).width + 48, bh = 44;
+  x.fillStyle = "rgba(245,158,11,.14)";
+  x.beginPath();
+  x.roundRect(72, 74, bw, bh, 22);
+  x.fill();
+  x.fillStyle = AMBER;
+  x.fillText(badge, 96, 103);
+  x.letterSpacing = "0px";
+
+  // Headline
+  x.fillStyle = WHITE;
+  x.font = F(800, 66);
+  x.fillText("Mennyibe kerül", 72, 232);
+  x.fillText("a javítás?", 72, 306);
+
+  // Subline
+  x.fillStyle = "#D9D7D3";
+  x.font = F(400, 30);
+  // Kept short on purpose: the quote card starts at x=726, and a longer line
+  // slides underneath it.
+  x.fillText("Pár kérdés, és kijön a tételes ár.", 72, 378);
+  x.fillText("Munkadíj és alkatrész külön.", 72, 422);
+
+  // The sample quote block on the right, so the card shows the OUTPUT rather
+  // than describing it.
+  const bx = 726, by = 132, bwid = 402, bhei = 300;
+  x.fillStyle = "rgba(255,255,255,.05)";
+  x.beginPath(); x.roundRect(bx, by, bwid, bhei, 20); x.fill();
+  x.strokeStyle = "rgba(255,255,255,.12)"; x.lineWidth = 2; x.stroke();
+
+  x.fillStyle = DIM; x.font = F(500, 20);
+  x.fillText("VW Passat 2.0 TDI", bx + 28, by + 52);
+  x.fillStyle = WHITE; x.font = F(700, 25);
+  x.fillText("Kuplungcsere", bx + 28, by + 88);
+
+  const row = (label, value, yy) => {
+    x.fillStyle = DIM; x.font = F(400, 19);
+    x.fillText(label, bx + 28, yy);
+    x.fillStyle = "#EDECEA"; x.font = F(600, 19);
+    const w = x.measureText(value).width;
+    x.fillText(value, bx + bwid - 28 - w, yy);
+  };
+  row("Munkadíj, 5,5 óra", "84 000 Ft", by + 138);
+  row("Kuplungszett", "89 000 Ft", by + 172);
+  row("Kettőstömegű lendkerék", "178 000 Ft", by + 206);
+
+  x.strokeStyle = "rgba(255,255,255,.14)"; x.lineWidth = 1;
+  x.beginPath(); x.moveTo(bx + 28, by + 228); x.lineTo(bx + bwid - 28, by + 228); x.stroke();
+
+  x.fillStyle = AMBER; x.font = F(800, 34);
+  const total = "358 000 Ft-tól";
+  x.fillText(total, bx + bwid - 28 - x.measureText(total).width, by + 274);
+
+  // Footer
+  x.fillStyle = DIM; x.font = F(500, 22);
+  x.fillText("landscale.agency", 72, 552);
+
+  window.__og = c.toDataURL("image/jpeg", 0.9);
+</script>
+</body>
+</html>
