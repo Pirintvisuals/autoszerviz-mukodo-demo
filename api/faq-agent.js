@@ -378,8 +378,8 @@ function questionText(field, sel) {
     const f = fieldDef(field);
     const lines = [`**${textOf(f.q, sel)}**`];
     const hint = textOf(f.hint, sel);
+    if (f.type === "multi") lines.push("Jelölj be egyet vagy többet, aztán nyomd meg a **Tovább** gombot.");
     if (hint) lines.push(hint);
-    if (f.type === "multi") lines.push("Több is választható - a végén nyomd meg a **Tovább** gombot.");
     if (f.type === "text") lines.push("Írd be ide, a saját szavaiddal.");
     return lines.join("\n");
 }
@@ -391,6 +391,7 @@ function ackText(field, sel) {
     const f = fieldDef(field);
     const i = Math.max(0, projectOrder(sel).indexOf(field)) % ACK.length;
     if (field === "vin" && FLOW.vinLooksValid(sel.vin)) return FLOW.vinNote(sel.vin, sel);
+    if (field === "vin") return "Rendben, alvázszám nélkül.";
     const note = textOf(f.after, sel);
     return `${ACK[i]}: **${labelFor(field, sel[field], sel)}**.` + (note ? `\n${note}` : "");
 }
@@ -401,7 +402,7 @@ function ackText(field, sel) {
 // ---------------------------------------------------------------------------
 const FORM = "__tetelek";
 const FEEDBACK = "__feedback";
-const FORM_INTRO = "Megvannak a tételek. Nézd át, és ha ennél az autónál más kell, írd át.";
+const FORM_INTRO = "**Utolsó lépés: a tételek.** Minden sornál ott az alap óraszám vagy ár. Ha ennél az autónál más kell, írd át - ha jó, hagyd úgy.";
 
 // Offered after every finished quote. Without a way on, the conversation
 // simply dead-ended - exactly what the first tester reported: "egy lekérdezés
@@ -464,7 +465,7 @@ function quotaRecord(ctx, sel) {
         list.push({ session: ctx.sessionId, fp: fingerprint(sel), at: Date.now() });
     }
 }
-const LIMIT_TEXT = "Ezt a mintát **mindenki egyszer** próbálhatja ki - a tiéd már elkészült.\n\nHa kérsz egy sajátot, a te óradíjaddal, árlistáddal és munkáiddal, hagyd itt, hol érlek el, és megcsinálom neked.";
+const LIMIT_TEXT = "**Ezt a mintát egyszer lehet kipróbálni** - a tiéd már elkészült.\n\nHa kérsz egy sajátot a te áraiddal, add meg lent, hol érlek el.";
 function limitResponse(response, sel) {
     return response.status(200).json({
         answer: LIMIT_TEXT, chips: [], state: sel, limited: true, form: leadForm(sel),
@@ -544,9 +545,9 @@ function tetelekForm(sel) {
 
     return {
         action: "tetelek",
-        title: "A tételek - írd át, ami nálad más",
-        why: "Ezek a szerviz beépített normaidői és árai. Ha ennél az autónál más kell, írd át - csak erre az ajánlatra vonatkozik. Új sort is felvehetsz: amit a bontásnál találtál, a vizsgadíj, a gumi ára.",
-        submit: "Kész, mutasd az ajánlatot",
+        title: "Tételek",
+        why: "Ami nincs a listában (beszorult csavar, vizsgadíj, gumi ára), azt a „+ Új tétel” gombbal veszed fel. Amit itt átírsz, az csak erre az ajánlatra vonatkozik.",
+        submit: "Kész - mutasd az ajánlatot",
         allowExtras: true,
         extraFrom: ov.extra.length,
         fields,
@@ -644,8 +645,8 @@ function groupFor(sel, next) {
 function groupIntro(group, sel) {
     const n = pendingIn(group, sel).length;
     return group.key === "car"
-        ? "**Melyik autóról van szó?** Kezdd el írni a márkát, a többit felkínálom."
-        : `Már csak **${n} kérdés** a munkáról, egy képernyőn - utána jönnek a tételek.`;
+        ? "**Melyik autó?** Kezdd el írni a márkát, és válassz a listából. A típust és a motort ezután felkínálom."
+        : `**Pár kérdés a munkáról** (${n} db, egy képernyőn). Utána jönnek a tételek.`;
 }
 
 // Which car fields are type-ahead boxes, and what fills each one. The brand box
@@ -726,15 +727,15 @@ const FB_ROLE = ["Szerelő vagyok", "Szerviztulajdonos vagyok", "Autós vagyok"]
 function feedbackForm(sel) {
     return {
         action: "feedback",
-        title: "Használható ez így?",
-        why: "Prototípus. Te vagy az, akinek készül - ha valami hiányzik belőle vagy hülyeség benne, az a leghasznosabb, amit mondhatsz.",
+        title: "Mit gondolsz?",
+        why: "Egy mondat is sokat segít. Egyik mező sem kötelező.",
         submit: "Elküldöm",
         // The question changed with the audience. The old one asked a mechanic
         // to check a price meant for a customer; this asks whether the thing he
         // has just used would survive a real day in his own workshop.
         fields: [
-            { key: "fb_text", label: "Mi hiányzik ahhoz, hogy ezt tényleg használnád?", placeholder: "Írd le nyugodtan", type: "textarea", value: "", optional: true },
-            { key: "fb_price", label: "Mennyiért adtad volna ki te ezt a munkát?", placeholder: "pl. 85 000 Ft", type: "text", value: "", optional: true },
+            { key: "fb_text", label: "Mi hiányzik, hogy tényleg használd?", placeholder: "Írd le nyugodtan", type: "textarea", value: "", optional: true },
+            { key: "fb_price", label: "Te mennyiért adtad volna ki ezt a munkát?", placeholder: "pl. 85 000 Ft", type: "text", value: "", optional: true },
             { key: "fb_verdict", label: "Egy szóban", type: "select", options: FB_VERDICT, value: "", optional: true },
         ],
     };
@@ -754,11 +755,11 @@ function leadForm(sel) {
     return {
         action: "lead",
         title: "Kérsz egy sajátot?",
-        why: "Ez a prototípus alapértelmezésekkel dolgozik. A tiédbe a te normaidőid, a te beszállítód árai és a te ajánlatsablonod kerülnének. Ha érdekel, megcsinálom és megmutatom - nem küldök semmi mást.",
-        submit: "Érdekel, mutasd meg",
+        why: "Megcsinálom a te óradíjaddal, árlistáddal és munkáiddal, és megmutatom. Ingyen, és nem küldök semmi mást.",
+        submit: "Kérem",
         fields: [
             { key: "lead_name", label: "Neved", placeholder: "pl. Kovács Zoltán", type: "text", value: "", optional: true },
-            { key: "lead_contact", label: "Hol érlek el?", placeholder: "e-mail cím (vagy telefon, ha úgy jobb)", type: "text", value: "", optional: true },
+            { key: "lead_contact", label: "Telefon vagy e-mail", placeholder: "ahol el tudlak érni", type: "text", value: "", optional: true },
             { key: "lead_shop", label: "Szerviz neve, helye (nem kötelező)", placeholder: "pl. Kovács Autószerviz, Debrecen", type: "text", value: "", optional: true },
         ],
     };
@@ -838,10 +839,12 @@ function renderQuote(q, sel) {
 
     const next = [
         q.edited
-            ? `${q.edited} sort írtál át - azok a ✎ jelölt tételek.`
-            : `Minden sor a javaslat szerint ment. Ha valamelyik nem stimmel, a „${EDIT_CHIP}” gombbal átírhatod.`,
+            ? `**Kész az ajánlat.** ${q.edited} sort írtál át (✎ jel).`
+            : `**Kész az ajánlat.**`,
         ``,
-        `Lent megtalálod az **ügyfélnek átadható változatot** - azt másolhatod e-mailbe vagy üzenetbe.`,
+        `Lent az **ügyfélnek szóló változat**: nyomd meg a **Másolás** gombot, és illeszd be e-mailbe vagy Messengerbe.`,
+        ``,
+        `Javítanál valamit? **${EDIT_CHIP}**`,
     ].filter((x) => x !== null).join("\n");
 
     return [head.join("\n"), next].join("\n[[SPLIT]]\n");
@@ -896,7 +899,7 @@ function notesPanel(q) {
     if (q.billing) lines.push(`**Erre gondolj:** ${q.billing}`);
     for (const n of q.notes) lines.push(`**Ne maradjon le:** ${n}`);
     if (!lines.length) return null;
-    return { title: "Amit ilyenkor ki szoktak felejteni", lines };
+    return { title: "Ne felejtsd el ráírni", lines };
 }
 
 // What this prototype cannot do, and what a real build for his shop would.
@@ -904,14 +907,14 @@ function notesPanel(q) {
 // mechanic who has just used it will spot every one of these anyway.
 function liveVersionPanel(sel, quote) {
     return {
-        title: "Ez egy minta szerviz. A tiédet én építem meg:",
+        title: "Ez egy minta szerviz. A sajátodba ez kerül:",
         lines: [
             "a **te óradíjaiddal és árlistáddal**, beépítve - neked nem kell semmit beállítani",
             "a **te munkáiddal**, azokkal a normaidőkkel, amikkel te dolgozol",
             "a **te fejléceddel** az ügyfélnek kimenő ajánlaton",
             "ha van beszállítói hozzáférésed, az **alkatrészár onnan**, cikkszámra",
         ],
-        footer: "Te csak kiválasztod a munkát, és ha kell, átírsz egy sort.",
+        footer: "Neked nem kell semmit beállítanod - csak használod.",
     };
 }
 
@@ -921,8 +924,8 @@ function liveVersionPanel(sel, quote) {
 function workingsPanel(q) {
     if (!q.workings.length) return null;
     return {
-        title: "Miből jött ki ez az ár?",
-        note: "Minden sor nettó. Ahol átírtad a javaslatot, ott az szerepel, hogy a te számod ment bele.",
+        title: "Miből jött ki az ár?",
+        note: "Soronként, nettóban. Ahol átírtad, ott a te számod szerepel.",
         lines: q.workings,
         footer: `Nettó összesen ${formatHuf(q.net)}${q.vatRate > 0 ? `, ÁFA-val ${formatHuf(q.total)}` : ""}.`,
     };
@@ -1485,15 +1488,15 @@ async function finishQuote(sel, history, response, ctx, prefix = "") {
         // working out the number, this is the thing the customer receives.
         customer: {
             title: "Az ügyfélnek átadható ajánlat",
-            note: "Ezt másolhatod e-mailbe, Messengerbe vagy nyomtatható levélbe. Nettó/bruttó bontással, a belső számolás nélkül.",
+            note: "Ezt kapja az ügyfél. Másold ki, és küldd el e-mailben vagy Messengeren.",
             text: customer,
             copy: "Másolás",
             copied: "Kimásolva",
         },
         scope: notesPanel(quote),
         demo: {
-            divider: "Eddig tart maga az ajánlat.",
-            intro: "Innentől a prototípusról van szó, nem az ügyfélről.",
+            divider: "Eddig tart az ajánlat.",
+            intro: "Lent: miből jött ki az ár, és egy rövid kérdés tőled.",
             workings: workingsPanel(quote),
             live: liveVersionPanel(sel, quote),
         },

@@ -14,8 +14,8 @@
     // car is not worth having. So it was turned round: this one is for the
     // mechanic, and it starts where his knowledge starts, with the car already
     // on the lift.
-    greeting: "Szia! Ez **neked készült, nem az ügyfelednek**.\n\nMár láttad az autót, tudod mi a munka - innentől az ajánlat összerakása adminisztráció. Azt viszem: normaidő, alkatrész, apróanyag, ÁFA, és a végén egy **kimásolható ajánlat** az ügyfélnek.\n\nEz egy **minta szerviz** piaci átlagárakkal. A tiédet én építem meg, a te óradíjaddal és árlistáddal - neked semmit nem kell beállítani.",
-    hint: "Írj bátran - pl. „ez a munka nálam 3 óra”",
+    greeting: "Szia! Ezzel **2 perc alatt összeraksz egy tételes árajánlatot** egy autóra, amit már megnéztél.\n\n**Így megy:**\n1. Kiválasztod a munkát\n2. Megadod az autót\n3. Válaszolsz pár kérdésre a munkáról\n4. Átnézed a tételeket, és átírod, ami nálad más\n\nA végén kapsz egy **kimásolható ajánlatot** az ügyfélnek.",
+    hint: "Kérdésed van? Írd be ide.",
     teasers: [
       "Árazz be egy kuplungcserét 2 perc alatt.",
       "A te áraiddal építem meg, nem kell beállítani.",
@@ -48,10 +48,10 @@
     chatClose: "Csevegés bezárása",
     sendAria: "Küldés",
     callAria: "Hívás",
-    placeholder: "Írd be a válaszod, vagy kérdezz…",
+    placeholder: "Írj ide, ha kérdésed van…",
     inputAria: "Válasz vagy kérdés",
     dialogAria: "Autószerviz árajánlat-készítő",
-    concept: "Minta szerviz, piaci átlagárakkal. A tiédbe a te óradíjad és árlistád kerül - azt én építem be.",
+    concept: "Minta szerviz, átlagárakkal. A sajátodat a te áraiddal építem meg - neked nem kell beállítanod semmit.",
     next: "Tovább",
     errGeneric: "Elnézést, hiba történt. Próbáld újra, vagy hívj: " + PHONE,
     errConnect: "Elnézést, nem sikerült kapcsolódni. Próbáld újra, vagy hívj: " + PHONE,
