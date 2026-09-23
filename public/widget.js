@@ -797,7 +797,9 @@
       const all = getOptions() || [];
       // With nothing typed, show the lot (capped) so the box is browsable too,
       // not only searchable - a lot of people would rather scan than type.
-      const hits = (typed ? all.filter((o) => fold(o).includes(typed)) : all).slice(0, 8);
+      // The list scrolls, so a short cap only hides real options: with the bigger
+      // catalogue a make has up to 19 models, and Kodiaq was invisible until typed.
+      const hits = (typed ? all.filter((o) => fold(o).includes(typed)) : all).slice(0, 60);
       list.innerHTML = "";
       if (!hits.length) { close(); return; }
       hits.forEach((o, i) => {
