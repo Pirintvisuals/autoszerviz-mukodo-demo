@@ -17,14 +17,15 @@
 //   - The PRICE is computed here from lib/flow.js, deterministically. The model
 //     never does arithmetic, so it cannot invent a number.
 //
-//  PROTOTYPE BEHAVIOUR (this build is for mechanics to test and try to break):
-//   - a banner above the chat says the prices are sample data;
-//   - every quote carries a "Miből jött ki?" panel with the normaidő, the
-//     óradíj and the part price used, so a mechanic can audit the arithmetic;
-//   - the owner's notification is shown on screen, because seeing what the shop
-//     receives is the half of the product that a price alone never explains;
-//   - a feedback step asks mechanics where it is wrong and what the job would
-//     cost at their place, and mails the answer with the transcript.
+//  WHO USES THIS BUILD: the workshop owner, after he has had the car on the
+//  lift. Not the customer. That changes the shape of the whole conversation:
+//   - it opens by asking for HIS hourly rates, once, and remembers them;
+//   - no question offers a "Nem tudom", because he has already looked;
+//   - the last screen is not a price but the PRICED LINES, editable - his
+//     normaidő and his part prices type straight over the proposal;
+//   - the output is a final, itemised, net/gross quote plus the plain-text
+//     version he copies to the customer, not an estimate with a floor;
+//   - a feedback step asks what is missing before he would really use it.
 // ============================================================================
 import { waitUntil } from "@vercel/functions";
 import * as FLOW from "../lib/flow.js";
@@ -33,10 +34,11 @@ const PHONE = process.env.LEAD_PHONE || FLOW.BOT.phone;
 const leadTo = () => process.env.LEAD_EMAIL_TO || FLOW.BOT.email;
 const leadFrom = () => process.env.LEAD_EMAIL_FROM || "Autószerviz minta <onboarding@resend.dev>";
 
-// Flow prices are NET. A car owner is a private customer who pays the gross
-// figure at the counter, so that is the number shown - saying "nettó" to
-// somebody who will hand over a card is just a smaller lie than a wrong price.
-const VAT_RATE = 0.27;
+// Flow prices are NET. The mechanic works in net and the customer pays gross,
+// so a quote built here shows both - at the SHOP's VAT rate, set in its build:
+// a good few one-man workshops in Hungary are alanyi adómentes, and stapling
+// 27% onto their quote would make every number they issue wrong.
+const vatRate = () => FLOW.SHOP.vat;
 
 // ---------------------------------------------------------------------------
 //  Formatting
@@ -174,11 +176,6 @@ function emailIssue(email) {
     return null;
 }
 
-function phoneIssue(phone) {
-    const d = String(phone || "").replace(/[^\d]/g, "");
-    return d.length >= 9 && d.length <= 13 ? null : "format";
-}
-
 // A Hungarian plate is AAA-123 (old) or AA-BB-123 (2022-). Anything else is
 // accepted as-is and simply flagged as foreign on the owner's card - we never
 // guess WHICH country, because that is not something a plate reliably tells us.
@@ -285,8 +282,10 @@ function mapAnswer(field, text, sel) {
         return null;
     }
     if (f.type === "year") {
-        const y = parseYear(raw);
-        if (y) return y;
+        // Terminal for the same reason as in sanitizeState: the field is `free`
+        // so a typed year works, and without this an unparseable one would be
+        // taken at face value by the free-text branch at the bottom.
+        return parseYear(raw);
     }
     if (f.type === "text") {
         return raw.length >= 3 ? oneLine(raw).slice(0, 400) : null;
@@ -300,8 +299,16 @@ function mapAnswer(field, text, sel) {
     return null;
 }
 
-const CONTACT_KEYS = ["name", "phone", "email", "plate", "when_pref", "when_note"];
+// Who the quote is for. Optional throughout - a shop pricing a car it already
+// has in the workshop knows perfectly well whose it is, and making him retype
+// it would be the tool adding work rather than removing it.
+const CONTACT_KEYS = ["ugyfel", "plate"];
 const FEEDBACK_KEYS = ["fb_verdict", "fb_price", "fb_text", "fb_role", "lead_name", "lead_contact", "lead_shop"];
+
+// An optional row the mechanic deliberately left blank. It has to be RECORDED,
+// not merely absent: pendingField looks for missing keys, so a blank optional
+// field with no marker would be asked again forever.
+const SKIP = "-";
 
 function sanitizeState(raw) {
     const out = {};
@@ -311,6 +318,17 @@ function sanitizeState(raw) {
         const f = FLOW.FIELDS[field];
         const v = String(raw[field]).slice(0, 400);
         const allowed = new Set(allValues(field));
+        if (f.optional && v === SKIP) {
+            out[field] = SKIP;
+            continue;
+        }
+        if (f.type === "tetelek") {
+            // Re-serialised through the parser, so nothing the client invents
+            // survives into the price model.
+            const parsed = FLOW.parseOverrides(String(raw[field]).slice(0, 20000));
+            out[field] = FLOW.serializeOverrides(parsed);
+            continue;
+        }
         if (f.type === "multi") {
             const vals = v.split(",").filter((x) => allowed.has(x));
             if (vals.length) out[field] = [...new Set(vals)].join(",");
@@ -322,8 +340,13 @@ function sanitizeState(raw) {
             // so a half-typed number can never reach the owner's card looking
             // like a confirmed one.
             if (FLOW.vinLooksValid(v)) out[field] = cleanVin(v);
-        } else if (f.type === "year" && parseYear(v)) {
-            out[field] = parseYear(v);
+        } else if (f.type === "year") {
+            // The year box accepts a typed year as well as the bands, which
+            // means `free` is set on it - so it has to be terminal here, or an
+            // impossible "3000" falls through to the free-text branch below and
+            // is kept verbatim.
+            const y = parseYear(v);
+            if (y) out[field] = y;
         } else if ((f.type === "text" || f.free) && v.length >= 2 && !/[<>{}]/.test(v)) {
             out[field] = oneLine(v);
         }
@@ -335,6 +358,7 @@ function sanitizeState(raw) {
 function labelFor(field, value, sel) {
     const f = fieldDef(field);
     if (!f || value == null || String(value) === "") return "-";
+    if (String(value) === SKIP) return "-";
     const opts = optionsFor(field, sel);
     const find = (v) => opts.find((o) => o.value === v);
     if (f.type === "multi") return String(value).split(",").map((v) => (find(v) || {}).label || v).join(", ");
@@ -375,30 +399,79 @@ function ackText(field, sel) {
 //  Contact form. Once every question that moves the price is answered, the rest
 //  is admin, so it is one form instead of four more bubbles.
 // ---------------------------------------------------------------------------
-const FORM = "__contact";
+const FORM = "__tetelek";
 const FEEDBACK = "__feedback";
-const WHEN_PREF = ["Hétköznap délelőtt", "Hétköznap délután", "Szombaton", "Mindegy, hívjatok"];
-const REQUIRED_CONTACT = ["name", "email"];
-const contactReady = (s) => REQUIRED_CONTACT.every((k) => has(s, k));
-const FORM_INTRO = "Köszönöm! Add meg az elérhetőséged, és a szerviz vissza tud jelezni.";
+const FORM_INTRO = "Megvannak a tételek. Nézd át, és ha ennél az autónál más kell, írd át.";
 
-// Whether the flow asks who the quote is for. ON, but only AFTER the price,
-// and deliberately WITHOUT a phone number.
-//
-// The first version asked for name, phone and e-mail BEFORE the price, and two
-// mechanics quit at exactly that screen - one saying out loud what the other
-// implied: "Nem akarok se nevet se telefonszámot se email címet megadni. Utána
-// meg hívogattok majd." The phone number is the part that reads as "then they
-// ring me". Asking for a name and an e-mail once the number is already on
-// screen costs far less, and by then it is a fair trade rather than a toll.
-const ASK_CONTACT = (process.env.ASK_CONTACT || "on").toLowerCase() === "on";
-
-// Offered after every finished quote. A mechanic testing this wants to try
-// three cars, not one - and without this the conversation simply dead-ended,
-// which is exactly what the first tester reported: "egy lekérdezés után
-// megakadt és többet nem tudott mondani".
-const RESTART_CHIP = "Másik autóra is kérek árat";
+// Offered after every finished quote. Without a way on, the conversation
+// simply dead-ended - exactly what the first tester reported: "egy lekérdezés
+// után megakadt és többet nem tudott mondani".
+const RESTART_CHIP = "Új ajánlat másik autóra";
+const EDIT_CHIP = "Tételek módosítása";
 const isRestart = (text) => norm(text) === norm(RESTART_CHIP);
+const isEdit = (text) => norm(text) === norm(EDIT_CHIP);
+
+// ---------------------------------------------------------------------------
+//  ONE QUOTE PER PERSON (the Facebook-group demo).
+//
+//  Two layers, because neither holds on its own:
+//   - the BROWSER is the real limit: once a quote is done, the widget remembers
+//     it and every later visit opens on the "már kipróbáltad" message;
+//   - the SERVER is a backstop against simply clearing that: a session may
+//     only ever finish ONE car, and one IP may open only a few sessions a day.
+//  The IP cap is deliberately not 1. Hungarian mobile carriers put many phones
+//  behind one shared address, so "one per IP" would lock out real mechanics
+//  who never touched it - in a group where almost everyone is on mobile data.
+//  The server memory is per instance and resets on a cold start: this stops
+//  casual re-runs, not someone determined, and it does not need to.
+//
+//  OWNER_KEY: open the page as ?teszt=<OWNER_KEY> and none of this applies,
+//  so testing your own demo does not lock you out of it.
+// ---------------------------------------------------------------------------
+const oneQuote = () => (process.env.ONE_QUOTE || "on").toLowerCase() !== "off";
+const sessionsPerIp = () => Number(process.env.QUOTE_SESSIONS_PER_IP) || 3;
+const QUOTA_WINDOW_MS = 24 * 60 * 60_000;
+const QUOTA = new Map(); // ip -> [{ session, fp, at }]
+const isOwner = (key) => !!process.env.OWNER_KEY && typeof key === "string" && key === process.env.OWNER_KEY;
+const limited = (ctx) => oneQuote() && !(ctx && ctx.owner);
+// What makes two quotes "the same one": the car and the jobs. Re-opening the
+// line editor and changing an hour does not make a second quote.
+const fingerprint = (sel) => `${FLOW.carLine(sel)}|${sel.jobs || ""}`;
+
+function quotaEntries(ip) {
+    const now = Date.now();
+    const list = (QUOTA.get(ip) || []).filter((e) => now - e.at < QUOTA_WINDOW_MS);
+    QUOTA.set(ip, list);
+    return list;
+}
+// Has THIS session already finished a quote?
+function sessionUsed(ctx) {
+    if (!limited(ctx)) return false;
+    return quotaEntries(ctx.ip).some((e) => e.session === ctx.sessionId);
+}
+// May this session start, or finish this particular quote?
+function quotaBlocked(ctx, sel) {
+    if (!limited(ctx)) return false;
+    const list = quotaEntries(ctx.ip);
+    const mine = list.find((e) => e.session === ctx.sessionId);
+    if (mine) return !!sel && mine.fp !== fingerprint(sel);
+    return list.length >= sessionsPerIp();
+}
+function quotaRecord(ctx, sel) {
+    if (!limited(ctx)) return;
+    const list = quotaEntries(ctx.ip);
+    if (!list.some((e) => e.session === ctx.sessionId)) {
+        list.push({ session: ctx.sessionId, fp: fingerprint(sel), at: Date.now() });
+    }
+}
+const LIMIT_TEXT = "Ezt a mintát **mindenki egyszer** próbálhatja ki - a tiéd már elkészült.\n\nHa kérsz egy sajátot, a te óradíjaddal, árlistáddal és munkáiddal, hagyd itt, hol érlek el, és megcsinálom neked.";
+function limitResponse(response, sel) {
+    return response.status(200).json({
+        answer: LIMIT_TEXT, chips: [], state: sel, limited: true, form: leadForm(sel),
+    });
+}
+// After a quote the only way on is the line editor - unless the limit is off.
+const moreChips = (ctx) => (limited(ctx) ? [] : [RESTART_CHIP]);
 
 // Whether a finished quote is e-mailed.
 //
@@ -410,14 +483,6 @@ const isRestart = (text) => norm(text) === norm(RESTART_CHIP);
 // Mechanic feedback is always e-mailed: it is rare and it is the whole point.
 const EMAIL_QUOTES = (process.env.EMAIL_QUOTES || "").toLowerCase() === "on";
 
-// The one-tap verdict shown directly under the price.
-//
-// 25 people got a price on day one and not one filled in the feedback form,
-// which sat at the bottom behind the workshop card and two panels. They got
-// the number they came for and left. A single row of buttons under the price
-// asks for one tap instead of three fields.
-const QUICK_VERDICTS = ["Jó az ár", "Sok", "Kevés", "Kevés a kérdés"];
-
 // A plausible but deliberately fake plate for the prototype's fill button. PR-OT
 // is not a live Hungarian series, so it reads as a sample to anyone who knows
 // plates, while still being the right shape.
@@ -425,60 +490,127 @@ function samplePlate() {
     return `PR-OT-${String(100 + Math.floor(Math.random() * 900))}`;
 }
 
-function contactForm(sel) {
-    const val = (k) => (has(sel, k) ? String(sel[k]) : "");
+// ---------------------------------------------------------------------------
+//  THE TÉTELEK SCREEN - the one that makes this a mechanic's tool.
+//
+//  Everything before it is the same sort of questionnaire the customer-facing
+//  build had. This screen is the difference: the engine proposes a normaidő and
+//  a part price for every line, and the man who has just had the car on the
+//  lift types over whichever ones he disagrees with. A proposal he accepts
+//  costs him nothing; a proposal he rejects costs him one number.
+//
+//  It is also the honest stand-in for the two licensed databases this prototype
+//  does not have. A real build pulls the hours from a normaidő licence and the
+//  part price from the shop's supplier catalogue by part number; here they are
+//  defaults with an override on top. The override is not a workaround - it stays
+//  in the live version too, because the mechanic is right more often than the
+//  table is.
+// ---------------------------------------------------------------------------
+const hourStr = (h) => String(Math.round(h * 100) / 100).replace(".", ",");
+
+function tetelekForm(sel) {
+    const quote = assembleQuote(sel);
+    const fields = [];
+    for (const it of quote.items) {
+        if (it.kind === "munka") {
+            fields.push({
+                key: it.key, type: "number", decimal: true, unit: "óra",
+                label: it.label,
+                // A dot, not the Hungarian comma: this lands in an
+                // <input type="number">, which silently blanks "5,5".
+                value: String(Math.round(it.hours * 100) / 100),
+                note: `alap: ${hourStr(it.proposedHours)} óra · ${formatHuf(it.rate)}/óra`,
+                optional: true,
+            });
+        } else if (it.kind === "alkatresz") {
+            fields.push({
+                key: it.key, type: "number", unit: "Ft",
+                label: it.label + (it.qty > 1 ? ` (${hourStr(it.qty)} ×, egységár)` : ""),
+                value: String(Math.round(it.unit)),
+                note: `alap: ${formatHuf(it.proposedUnit)} nettó`,
+                optional: true,
+            });
+        }
+    }
+    // Lines he added himself last time round come back editable rather than
+    // frozen, so a typo in one is fixable without starting again.
+    const ov = FLOW.parseOverrides(sel.tetelek);
+    ov.extra.forEach((e, i) => {
+        fields.push({ key: `xlabel:${i}`, type: "text", label: "Saját tétel", value: e.label, optional: true, placeholder: "pl. Beszorult csavar kifúrása" });
+        fields.push({ key: `xar:${i}`, type: "number", unit: "Ft", label: "Saját tétel nettó ára", value: String(Math.round(e.amount)), optional: true });
+    });
+    fields.push({ key: "ugyfel", label: "Ügyfél neve (nem kötelező)", type: "text", placeholder: "pl. Nagy Péter", value: has(sel, "ugyfel") && sel.ugyfel !== SKIP ? String(sel.ugyfel) : "", optional: true });
+    fields.push({ key: "plate", label: "Rendszám (nem kötelező)", type: "text", placeholder: "AA-BB-123", value: has(sel, "plate") && sel.plate !== SKIP ? String(sel.plate) : "", optional: true, sample: samplePlate(), sampleLabel: "Minta rendszám" });
+
     return {
-        title: "Kinek szól az árajánlat?",
-        // No phone field, and the reason is said out loud. "Utána meg
-        // hívogattok majd" was the objection that cost the most drop-offs, and
-        // the honest answer is to not ask for the number at all.
-        why: "Telefonszámot nem kérünk - nem fog senki hívogatni. A nevedre csak azért van szükség, hogy lásd, mit kapna meg a szerviz.",
-        submit: "Mehet",
-        fields: [
-            { key: "name", label: "Név", placeholder: "A neved", type: "text", autocomplete: "name", value: val("name") },
-            { key: "email", label: "E-mail", placeholder: "pelda@gmail.com", type: "email", autocomplete: "email", value: val("email") },
-            { key: "plate", label: "Rendszám (nem kötelező)", placeholder: "AA-BB-123", type: "text", value: val("plate"), optional: true,
-              sample: samplePlate(), sampleLabel: "Minta rendszám" },
-            { key: "when_pref", label: "Mikor jó behozni? (nem kötelező)", type: "select", options: WHEN_PREF, value: val("when_pref"), optional: true },
-        ],
+        action: "tetelek",
+        title: "A tételek - írd át, ami nálad más",
+        why: "Ezek a szerviz beépített normaidői és árai. Ha ennél az autónál más kell, írd át - csak erre az ajánlatra vonatkozik. Új sort is felvehetsz: amit a bontásnál találtál, a vizsgadíj, a gumi ára.",
+        submit: "Kész, mutasd az ajánlatot",
+        allowExtras: true,
+        extraFrom: ov.extra.length,
+        fields,
     };
 }
 
-function validateContactForm(contact) {
-    const c = contact && typeof contact === "object" ? contact : {};
-    const get = (k) => oneLine(c[k]).slice(0, 200);
-    const errors = {};
+// Turn the submitted rows back into the override object. Anything unparseable
+// is simply left out, so the proposal stands for that line - a half-typed
+// number can never silently zero out a part.
+function validateTetelek(raw, sel) {
+    const c = raw && typeof raw === "object" ? raw : {};
+    const ov = { ora: {}, ar: {}, extra: [] };
     const values = {};
-    const REQ = "Ezt kérlek töltsd ki.";
+    const errors = {};
+    const parseNum = (v) => {
+        const s = oneLine(v).replace(/\s/g, "").replace(/ft$/i, "").replace(",", ".");
+        if (!s) return null;
+        const n = parseFloat(s);
+        return Number.isFinite(n) && n >= 0 ? n : NaN;
+    };
 
-    const name = get("name");
-    if (!name) errors.name = REQ;
-    else if (name.length < 2) errors.name = "Kérlek, a teljes nevedet add meg.";
-    else values.name = name;
-
-    // No longer asked for, but a value arriving from an older client is still
-    // accepted rather than dropped.
-    const phone = get("phone");
-    if (phone && !phoneIssue(phone)) values.phone = phone;
-
-    const email = get("email");
-    if (!email) errors.email = REQ;
-    else {
-        const i = emailIssue(email);
-        if (i === "gmail") errors.email = "Elírás lehet a címben - a Gmail végződése gmail.com.";
-        else if (i) errors.email = "Ezt az e-mail címet nem sikerült értelmezni.";
-        else values.email = email;
+    // Every box comes back filled, because it was pre-filled with the proposal.
+    // Only a number he actually CHANGED is an override. Saving the untouched
+    // ones as well would freeze derived lines: raise the hours and the
+    // apróanyag, which is a share of the labour, would stay stuck at its old
+    // figure because the old figure had been "typed" back in.
+    // The yardstick is the proposal as it stood when the form was drawn - the
+    // state BEFORE this submission. A box whose number still equals that was
+    // not touched, and the proposal stays live for it; so a consumables line he
+    // never looked at follows his new hours instead of freezing at the figure
+    // it showed a moment ago.
+    const proposal = {};
+    for (const it of assembleQuote(sel).items) {
+        proposal[it.key] = it.kind === "munka" ? it.proposedHours : it.proposedUnit;
+    }
+    const labels = {};
+    for (const key of Object.keys(c)) {
+        if (!(key.startsWith("ora:") || key.startsWith("ar:") || key.startsWith("xar:"))) continue;
+        const n = parseNum(c[key]);
+        if (n == null) continue;
+        if (Number.isNaN(n)) { errors[key] = "Számot írj ide."; continue; }
+        if (key.startsWith("xar:")) { labels[key] = n; continue; }
+        const tol = key.startsWith("ora:") ? 0.001 : 0.5;
+        if (proposal[key] != null && Math.abs(proposal[key] - n) < tol) continue;
+        if (key.startsWith("ora:")) ov.ora[key] = n;
+        else ov.ar[key] = n;
+    }
+    // A custom line needs both halves. A label with no price, or a price with no
+    // label, is dropped rather than guessed at.
+    for (const key of Object.keys(c)) {
+        if (!key.startsWith("xlabel:")) continue;
+        const i = key.slice("xlabel:".length);
+        const label = oneLine(c[key]).slice(0, 120);
+        const amount = labels[`xar:${i}`];
+        if (label && amount > 0) ov.extra.push({ label, amount });
     }
 
-    const plate = get("plate");
-    if (plate) values.plate = plate.toUpperCase();
+    const ugyfel = oneLine(c.ugyfel).slice(0, 120);
+    values.ugyfel = ugyfel || SKIP;
+    const plate = oneLine(c.plate).slice(0, 20);
+    values.plate = plate ? plate.toUpperCase() : SKIP;
+    values.tetelek = FLOW.serializeOverrides(FLOW.parseOverrides(ov));
 
-    const wp = WHEN_PREF.find((t) => norm(t) === norm(get("when_pref")));
-    if (wp) values.when_pref = wp;
-    const wn = get("when_note");
-    if (wn) values.when_note = wn;
-
-    return Object.keys(errors).length ? { errors } : { values };
+    return Object.keys(errors).length ? { errors, values } : { values };
 }
 
 // ---------------------------------------------------------------------------
@@ -512,8 +644,8 @@ function groupFor(sel, next) {
 function groupIntro(group, sel) {
     const n = pendingIn(group, sel).length;
     return group.key === "car"
-        ? "Jó. **Milyen autóról van szó?** Kezdd el írni a márkát, a többit felkínálom."
-        : `Már csak **${n} rövid kérdés** a munkáról, egy képernyőn - utána jön az ár.`;
+        ? "**Melyik autóról van szó?** Kezdd el írni a márkát, a többit felkínálom."
+        : `Már csak **${n} kérdés** a munkáról, egy képernyőn - utána jönnek a tételek.`;
 }
 
 // Which car fields are type-ahead boxes, and what fills each one. The brand box
@@ -566,7 +698,11 @@ function validateGroupForm(group, sel, raw) {
     for (const key of pendingIn(group, sel)) {
         const given = oneLine(c[key]).slice(0, 400);
         if (!given) {
-            if (fieldDef(key).type === "vin") values[key] = "nincs";
+            // A blank optional row is a decision, so it is recorded as one.
+            // Without the marker pendingField would keep finding the field
+            // missing and ask the same screen again, forever.
+            if (fieldDef(key).optional) values[key] = SKIP;
+            else if (fieldDef(key).type === "vin") values[key] = "nincs";
             else errors[key] = "Válassz egyet.";
             continue;
         }
@@ -584,21 +720,21 @@ function validateGroupForm(group, sel, raw) {
 //  quote, to everyone, and its most valuable field is the last one: what the
 //  job would cost at their own workshop.
 // ---------------------------------------------------------------------------
-const FB_VERDICT = ["Jó", "Rossz az ár", "Kevés a kérdés", "Sok a kérdés"];
+const FB_VERDICT = ["Használnám", "Nem használnám", "Kevés a kérdés", "Sok a kérdés"];
 const FB_ROLE = ["Szerelő vagyok", "Szerviztulajdonos vagyok", "Autós vagyok"];
 
 function feedbackForm(sel) {
     return {
         action: "feedback",
-        title: "Szerelő vagy? Hol téved?",
-        why: "Ez egy prototípus, minta árakkal. Ha látsz benne hülyeséget, az a leghasznosabb, amit mondhatsz.",
+        title: "Használható ez így?",
+        why: "Prototípus. Te vagy az, akinek készül - ha valami hiányzik belőle vagy hülyeség benne, az a leghasznosabb, amit mondhatsz.",
         submit: "Elküldöm",
-        // Two questions, not four. The one that matters is the price: it is the
-        // only answer that both calibrates the model AND tells you the person
-        // giving it actually prices cars for a living.
+        // The question changed with the audience. The old one asked a mechanic
+        // to check a price meant for a customer; this asks whether the thing he
+        // has just used would survive a real day in his own workshop.
         fields: [
-            { key: "fb_price", label: "Mennyiért csinálnád meg nálad ezt a munkát?", placeholder: "pl. 85 000 Ft", type: "text", value: "", optional: true },
-            { key: "fb_text", label: "Hol téved, mit kérdeztél volna még?", placeholder: "Írd le nyugodtan", type: "textarea", value: "", optional: true },
+            { key: "fb_text", label: "Mi hiányzik ahhoz, hogy ezt tényleg használnád?", placeholder: "Írd le nyugodtan", type: "textarea", value: "", optional: true },
+            { key: "fb_price", label: "Mennyiért adtad volna ki te ezt a munkát?", placeholder: "pl. 85 000 Ft", type: "text", value: "", optional: true },
             { key: "fb_verdict", label: "Egy szóban", type: "select", options: FB_VERDICT, value: "", optional: true },
         ],
     };
@@ -617,8 +753,8 @@ const LEAD = "__lead";
 function leadForm(sel) {
     return {
         action: "lead",
-        title: "Szerviztulajdonos vagy?",
-        why: "Ha megmondod az óradíjadat és honnan szerzed az alkatrészt, beállítom rá és megmutatom, mit dobna ki a TE áraiddal. Ingyen, és nem küldök semmi mást.",
+        title: "Kérsz egy sajátot?",
+        why: "Ez a prototípus alapértelmezésekkel dolgozik. A tiédbe a te normaidőid, a te beszállítód árai és a te ajánlatsablonod kerülnének. Ha érdekel, megcsinálom és megmutatom - nem küldök semmi mást.",
         submit: "Érdekel, mutasd meg",
         fields: [
             { key: "lead_name", label: "Neved", placeholder: "pl. Kovács Zoltán", type: "text", value: "", optional: true },
@@ -646,158 +782,136 @@ function pickFeedback(raw) {
 //  Quote - the flow prices the job in net Ft; this puts it on the gross basis
 //  the customer actually pays and rounds it for display.
 // ---------------------------------------------------------------------------
+// This is now a real quote, not an estimate, so the arithmetic follows invoice
+// rules rather than display convenience. Line items stay EXACT and net - the
+// mechanic typed 18 000 Ft for a part and 18 000 Ft is what appears - and the
+// VAT is worked out once on the net total, the way it goes on the paperwork.
+// The old build rounded every gross line to the nearest thousand, which is
+// right for a "-tól" estimate and wrong for a number somebody will invoice.
 function assembleQuote(sel) {
-    const k = 1 + VAT_RATE;
-    // Amounts the flow quotes inside sentences (the unit rates in the
-    // exclusions) go through the same VAT basis and rounding as the line items,
-    // so a water pump is not 20 000 Ft in the list and 20 320 Ft two lines below.
-    const money = (n) => {
-        const v = n * k;
-        return formatHuf(roundTo(v, v >= 10000 ? 1000 : 100));
-    };
-    // Line items round to the nearest 1000, so the audit panel must use the
-    // same rounding or it prints a different number from the line above it.
-    const itemMoney = (n) => formatHuf(roundTo(n * k, 1000));
-    const raw = FLOW.buildQuote(sel, { money, itemMoney });
+    const rate = vatRate(sel);
+    const money = (n) => formatHuf(Math.round(n));
+    const raw = FLOW.buildQuote(sel, { money, itemMoney: money });
     const items = raw.items
         .filter((i) => i.amount > 0)
-        .map((i) => ({ label: i.label, amount: roundTo(i.amount * k, 1000) }));
-    const total = items.reduce((s, i) => s + i.amount, 0);
+        .map((i) => ({ ...i, amount: Math.round(i.amount) }));
+    const net = items.reduce((s, i) => s + i.amount, 0);
+    const vat = Math.round(net * rate);
+    const labour = items.filter((i) => i.kind === "munka").reduce((s, i) => s + i.amount, 0);
     return {
         title: raw.title,
-        includes: raw.includes,
-        exclusions: raw.exclusions || [],
-        flags: raw.flags || [],
         workings: raw.workings || [],
-        assumed: raw.assumed || [],
-        expertise: raw.expertise || null,
-        diagnosticOnly: !!raw.diagnosticOnly,
-        items, total,
+        notes: raw.notes || [],
+        billing: raw.billing || null,
+        tier: raw.tier,
+        items,
+        labour,
+        parts: net - labour,
+        net,
+        vat,
+        vatRate: rate,
+        total: net + vat,
+        edited: items.filter((i) => i.edited).length,
     };
 }
 
-// Customer-facing result, as bubbles split by [[SPLIT]].
-function renderCustomerQuote(q, sel) {
-    const name = oneLine(sel.name).split(/\s+/).slice(-1)[0] || "";
-    const car = FLOW.carLine(sel);
+// The mechanic's own view of the finished quote. Net lines, because that is
+// what he works in, with the VAT and the gross shown once at the bottom the way
+// they appear on the paperwork. No "-tól", no exclusions list, no hedging: he
+// has seen the car, this is the number.
+function renderQuote(q, sel) {
+    const who = has(sel, "ugyfel") && sel.ugyfel !== SKIP ? String(sel.ugyfel) : null;
+    const plate = has(sel, "plate") && sel.plate !== SKIP ? String(sel.plate) : null;
 
-    const head = q.diagnosticOnly
-        ? [
-            `Köszönöm${name ? ", " + name : ""}! Erre **szándékosan nem adok javítási árat**.`,
-            ``,
-            `Amit leírtál, az tünet, nem konkrét munka. Ezt meg kell nézni, anélkül csak tippelnénk - és egy rossz tipp mindkettőnknek rossz.`,
-            ``,
-            `**${car}**`,
-            ...q.items.map((i) => `• ${i.label} - **${formatHuf(i.amount)}**`),
-            ``,
-            `**Diagnosztika: ${formatHuf(q.total)}**`,
-            `(bruttó ár, az ÁFA benne van)`,
-        ]
-        : [
-            `Köszönöm${name ? ", " + name : ""}! Itt van a becslés.`,
-            ``,
-            `**${q.title}**`,
-            `${car}`,
-            ``,
-            ...q.items.map((i) => `• ${i.label} - **${formatHuf(i.amount)}**`),
-            ``,
-            `**${formatHuf(q.total)}-tól**`,
-            `(bruttó ár, az ÁFA benne van)`,
-            ``,
-            `Tájékoztató ár. A szerviz erősíti meg, miután látta az autót.`,
-            ...(q.assumed.length ? [``, `Ahol nem tudtad a választ, a **szokásos esettel** számoltam, nem a legolcsóbbal.`] : []),
-        ];
-
-    // Only the single most important caveat goes in the bubble. The full list
-    // used to sit here - seven bullets under a finished price - and it buried
-    // the one line that actually needed reading. The rest is one tap away.
-    const lead = q.flags.length ? q.flags[0] : null;
-
-    const when = has(sel, "when_pref") && !/^mindegy/i.test(sel.when_pref) ? `, lehetőleg **${String(sel.when_pref).toLowerCase()}**` : "";
-    const next = [
-        lead ? `**Fontos:** ${lead}` : null,
-        lead ? `` : null,
-        q.diagnosticOnly
-            ? `**Hogyan tovább?** Behozod az autót egy diagnosztikára${when}, és a hibakeresés után kapsz rá tételes árat.`
-            : `**Hogyan tovább?** Egyeztetünk egy időpontot${when}. A szerviz megerősíti az árat, mielőtt bármihez hozzányúl.`,
+    const head = [
+        `**${q.title}**`,
+        `${FLOW.carLine(sel)}${plate ? ` · ${plate}` : ""}${who ? ` · ${who}` : ""}`,
         ``,
-        `Sürgős? Hívj: **${PHONE}**`,
+        ...q.items.map((i) => `• ${i.label} - **${formatHuf(i.amount)}**${i.edited ? " ✎" : ""}`),
+        ``,
+        `Munkadíj: **${formatHuf(q.labour)}** · Alkatrész és anyag: **${formatHuf(q.parts)}**`,
+        `Nettó összesen: **${formatHuf(q.net)}**`,
+        ...(q.vatRate > 0
+            ? [`ÁFA (27%): **${formatHuf(q.vat)}**`, ``, `**Bruttó végösszeg: ${formatHuf(q.total)}**`]
+            : [``, `**Végösszeg: ${formatHuf(q.total)}**`, `(alanyi adómentes, ÁFA nincs felszámítva)`]),
+    ];
+
+    const next = [
+        q.edited
+            ? `${q.edited} sort írtál át - azok a ✎ jelölt tételek.`
+            : `Minden sor a javaslat szerint ment. Ha valamelyik nem stimmel, a „${EDIT_CHIP}” gombbal átírhatod.`,
+        ``,
+        `Lent megtalálod az **ügyfélnek átadható változatot** - azt másolhatod e-mailbe vagy üzenetbe.`,
     ].filter((x) => x !== null).join("\n");
 
     return [head.join("\n"), next].join("\n[[SPLIT]]\n");
 }
 
-// Everything the quote does and does not cover, folded away under one tap.
-// A finished price with seven bullets stapled under it is not a quote, it is a
-// wall - and the person reading it has already got the number they came for.
-function scopePanel(q) {
+// The half the customer sees. Plain text on purpose: no markdown, no internal
+// working, no net/gross split beyond the one line that matters - it is written
+// to be pasted straight into an e-mail, a Messenger reply or a printed slip.
+// A quoting tool that cannot produce the document the customer receives has
+// only done half the job.
+function customerText(q, sel) {
+    const shop = FLOW.SHOP.name;
+    const who = has(sel, "ugyfel") && sel.ugyfel !== SKIP ? String(sel.ugyfel) : null;
+    const plate = has(sel, "plate") && sel.plate !== SKIP ? String(sel.plate) : null;
+    const vin = FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : null;
+    const d = new Date();
+    const date = `${d.getFullYear()}. ${String(d.getMonth() + 1).padStart(2, "0")}. ${String(d.getDate()).padStart(2, "0")}.`;
+
     const lines = [];
-    // The assumptions come FIRST. They are the part a customer could be
-    // surprised by at the counter, so they outrank the inclusions list.
-    for (const a of q.assumed) lines.push(`**Feltételeztem:** ${a}`);
-    lines.push(`**Benne van:** az ár ${q.includes}.`);
-    for (const e of q.exclusions) lines.push(`**Ezen felül jöhet:** ${e}`);
-    for (const f of q.flags.slice(1)) lines.push(`**Fontos:** ${f}`);
-    if (q.expertise) lines.push(`**Egy tipp:** ${q.expertise}`);
-    return { title: "Mi van az árban, és mi nem?", lines };
+    lines.push(`ÁRAJÁNLAT - ${shop}`);
+    lines.push(date);
+    lines.push("");
+    if (who) lines.push(`Ügyfél: ${who}`);
+    lines.push(`Gépjármű: ${FLOW.carLine(sel)}`);
+    if (plate) lines.push(`Rendszám: ${plate}`);
+    if (vin) lines.push(`Alvázszám: ${vin}`);
+    lines.push(`Munka: ${q.title}`);
+    lines.push("");
+    lines.push("TÉTELEK");
+    for (const i of q.items) lines.push(`- ${i.label}: ${formatHuf(i.amount)}`);
+    lines.push("");
+    if (q.vatRate > 0) {
+        lines.push(`Nettó összesen: ${formatHuf(q.net)}`);
+        lines.push(`ÁFA (27%): ${formatHuf(q.vat)}`);
+        lines.push(`BRUTTÓ VÉGÖSSZEG: ${formatHuf(q.total)}`);
+    } else {
+        lines.push(`VÉGÖSSZEG: ${formatHuf(q.total)}`);
+        lines.push("(alanyi adómentes, az ÁFA nem kerül felszámításra)");
+    }
+    lines.push("");
+    lines.push("Az ajánlat a fenti tételekre vonatkozik. Ha a munka során olyan hiba kerül elő,");
+    lines.push("ami ebben nem szerepel, a javítás megkezdése előtt egyeztetünk.");
+    return lines.join("\n");
 }
 
-// What the workshop would receive. Shown on screen because "the customer also
-// gets captured for you" is the half of the product a price alone never
-// explains - and a mechanic only believes it when he sees the card.
-function renderOwnerCard(q, sel) {
-    const vin = FLOW.vinLooksValid(sel.vin)
-        ? cleanVin(sel.vin) + (cleanVin(sel.vin) === FLOW.SAMPLE_VIN ? " (minta)" : "")
-        : "nem adta meg";
-    const rows = [];
-    rows.push(`**Ezt kapná meg a szerviz**`);
-    rows.push(`Ugyanez e-mailben is, a teljes beszélgetéssel.`);
-    rows.push(``);
-    rows.push(`• Autó: **${FLOW.carLine(sel)}**`);
-    rows.push(`• Alvázszám: **${vin}**`);
-    if (has(sel, "km")) rows.push(`• Kilométeróra: **${labelFor("km", sel.km, sel)}**`);
-    if (has(sel, "plate")) {
-        rows.push(`• Rendszám: **${oneLine(sel.plate)}**${plateIsHungarian(sel.plate) ? "" : " (nem magyar rendszám)"}`);
-    }
-    rows.push(`• Munka: **${q.title}**`);
-    if (has(sel, "tunet_leiras")) rows.push(`• Amit az ügyfél leírt: **${oneLine(sel.tunet_leiras)}**`);
-    if (has(sel, "parts_tier")) rows.push(`• Alkatrész: **${labelFor("parts_tier", sel.parts_tier, sel)}**`);
-    rows.push(`• Becsült összeg: **${formatHuf(q.total)}${q.diagnosticOnly ? "" : "-tól"}** (bruttó)`);
-    if (has(sel, "when_pref") || has(sel, "when_note")) {
-        rows.push(`• Mikor jó neki: **${[sel.when_pref, sel.when_note].filter(Boolean).map(oneLine).join(", ")}**`);
-    }
-    // With the contact step off, the card still SHOWS the capture - it just
-    // says where the details would land instead of demanding them first. That
-    // way a tester sees what the workshop receives without handing over a
-    // phone number to find out.
-    const contact = [sel.name, sel.phone, sel.email].filter(Boolean).map(oneLine).join(" · ");
-    rows.push(contact
-        ? `• Ügyfél: **${contact}**`
-        : `• Ügyfél: *ide kerülne a neve és az elérhetősége*`);
-    return rows.join("\n");
+// Reminders, not explanations. A mechanic does not need to be told how brakes
+// work; what is worth his time is the line that gets left off the invoice -
+// coolant with a water pump, the waste oil charge, the test fee he paid up
+// front. Every one of these is money he has already earned and might not bill.
+function notesPanel(q) {
+    const lines = [];
+    if (q.billing) lines.push(`**Erre gondolj:** ${q.billing}`);
+    for (const n of q.notes) lines.push(`**Ne maradjon le:** ${n}`);
+    if (!lines.length) return null;
+    return { title: "Amit ilyenkor ki szoktak felejteni", lines };
 }
 
-// What this prototype CANNOT do, and what the live version would - named
-// explicitly, right under the quote.
-//
-// This is the most commercially useful block in the whole thing. A mechanic
-// reading a sample price either dismisses it ("ez nem az én áram") or asks the
-// only question that matters ("és az enyémmel hogyan menne?"). Saying the limits
-// out loud, with the specific reason for each, turns the first reaction into the
-// second - and it is honest, which is the point: the gap between this and a real
-// quote is exactly the thing being sold.
+// What this prototype cannot do, and what a real build for his shop would.
+// Named plainly, because the gap IS the thing being sold - and because a
+// mechanic who has just used it will spot every one of these anyway.
 function liveVersionPanel(sel, quote) {
-    // Three lines, one clause each. The long version of this was correct and
-    // nobody would have read it: it sat at the bottom of a finished quote, after
-    // a mechanic already had the number he came for.
     return {
-        title: "Ez minta ár. Nálad a te számaid mennének bele:",
+        title: "Ez egy minta szerviz. A tiédet én építem meg:",
         lines: [
-            "a **te óradíjad** a budapesti átlag helyett",
-            "a **te beszerzési árad** a webshopár helyett",
-            "az **alvázszámból a pontos alkatrész**, a beszállítód rendszeréből",
+            "a **te óradíjaiddal és árlistáddal**, beépítve - neked nem kell semmit beállítani",
+            "a **te munkáiddal**, azokkal a normaidőkkel, amikkel te dolgozol",
+            "a **te fejléceddel** az ügyfélnek kimenő ajánlaton",
+            "ha van beszállítói hozzáférésed, az **alkatrészár onnan**, cikkszámra",
         ],
-        footer: "A kérdések és a kimenet pontosan ezek maradnak.",
+        footer: "Te csak kiválasztod a munkát, és ha kell, átírsz egy sort.",
     };
 }
 
@@ -808,9 +922,9 @@ function workingsPanel(q) {
     if (!q.workings.length) return null;
     return {
         title: "Miből jött ki ez az ár?",
-        note: "Minta adatok. Élesben a szerviz saját óradíja és alkatrészárai alapján számol. Az ügyfél ezt a panelt nem látja.",
+        note: "Minden sor nettó. Ahol átírtad a javaslatot, ott az szerepel, hogy a te számod ment bele.",
         lines: q.workings,
-        footer: `Minden összeg bruttó, az ÁFA-val együtt - ugyanaz a szám, ami fent is szerepel.`,
+        footer: `Nettó összesen ${formatHuf(q.net)}${q.vatRate > 0 ? `, ÁFA-val ${formatHuf(q.total)}` : ""}.`,
     };
 }
 
@@ -819,19 +933,18 @@ function workingsPanel(q) {
 // ===========================================================================
 function systemPrompt() {
     return `SZEMÉLYISÉG
-Te egy autószerviz automata árajánlatkészítője vagy. Az ügyféllel TEGEZŐDVE beszélsz, kizárólag MAGYARUL. Nyugodt, hozzáértő, tömör - úgy beszélsz, mint egy tapasztalt szervizes pultos, aki ért az autókhoz és nem siet.
+Te egy autószerviz árajánlat-készítőjének a beszélgetős része vagy. A felhasználó NEM az ügyfél, hanem MAGA A SZERELŐ vagy a szerviztulajdonos, aki már látta az autót és most árat ad rá. TEGEZŐDVE beszélsz, kizárólag MAGYARUL. Tömör, szakmai, kolléga-hangnem - nem magyarázod neki a saját szakmáját.
 
 AMIT TUDSZ
 ${FLOW.KNOWLEDGE}
 - Telefon: ${PHONE}
 
 SZABÁLYOK
-- SOHA ne mondj, ne becsülj és ne számolj árat. Az árat a rendszer számolja ki a kérdések végén; ha árat kérdeznek, mondd, hogy néhány kérdés után azonnal látja.
-- SOHA ne adj árat olyan tünetre, amit nem vizsgált meg senki. Ilyenkor diagnosztika a válasz.
-- SOHA ne találj ki alkatrészszámot, és ne állítsd, hogy valami raktáron van.
-- SOHA ne adj árat olyan munkára, ami nincs a vállalt munkák között.
-- Ha megkérdezik, ki vagy, mondd meg egyszerűen: a szerviz automata árajánlatkészítője vagy.
-- Ha az ügyfél elkalandozik, válaszolj röviden, és térj vissza a kérdéshez.
+- SOHA ne mondj, ne becsülj és ne számolj árat. Az árat a rendszer számolja ki; ha rákérdez, mondd, hogy a tételek képernyőn mindjárt látja, és ott át is írhatja.
+- SOHA ne magyarázd el neki, hogyan kell autót szerelni. Ő tudja. Te az adminisztrációt viszed.
+- SOHA ne találj ki alkatrészszámot, normaidőt vagy készletadatot.
+- Ha megkérdezik, ki vagy, mondd meg egyszerűen: a szerviz árajánlat-készítője vagy.
+- Ha elkalandozik, válaszolj röviden, és térj vissza a kérdéshez.
 - Ne ígérj konkrét időpontot vagy kedvezményt.
 - Legfeljebb 60 szó. A kulcsszavakat **félkövérrel** emeld ki; felsorolásnál a sor "• " jellel kezdődjön.
 - Soha ne használj emojit és hosszú gondolatjelet; helyette sima kötőjelet írj.
@@ -853,8 +966,8 @@ Kizárólag egyetlen JSON objektumot írj, semmi mást: {"valasz": "<az ügyfél
 A "valasz" szövegében használhatsz **félkövért** és "• " kezdetű felsorolást, de a választási lehetőségeket SOHA ne sorold fel - a gombokat a rendszer mutatja.`;
     if (mode === "form" || mode === "done") {
         const situation = mode === "form"
-            ? "Az ügyfél már látta az árat; a képernyőn egy rövid űrlap kéri a nevét és az e-mail címét. Telefonszámot NEM kérünk. Válaszolj röviden az üzenetére, majd kérd meg, hogy töltse ki."
-            : "Az árajánlat már elkészült, az ügyfél látta. Válaszolj röviden a kérdésére. Új árat ne adj; ha a munkán változtatna, mondd, hogy ezt a szerviz a helyszínen pontosítja.";
+            ? "A képernyőn ott vannak a kiszámolt tételek, szerkeszthető formában: minden sor óraszáma és ára átírható, és új sor is felvehető. Válaszolj röviden az üzenetére, majd kérd meg, hogy nézze át és írja át, ami nála más."
+            : "Az ajánlat elkészült, a szerelő látja. Válaszolj röviden a kérdésére. Új árat ne adj; ha a tételeken változtatna, mondd, hogy a „Tételek módosítása” gombbal átírhatja.";
         return head + `\n=== HELYZET ===\n${situation}` + format + `\nAz "ertek" mindig null.`;
     }
     const f = fieldDef(field);
@@ -1049,7 +1162,7 @@ function cleanModelText(text) {
 function send(response, sel, answer, key, extra = {}) {
     const out = { answer, state: sel, chips: [], ...progressOf(sel), ...extra };
     if (key === FORM) {
-        out.form = contactForm(sel);
+        out.form = tetelekForm(sel);
     } else if (key === FEEDBACK) {
         out.form = feedbackForm(sel);
     } else if (key && key.group) {
@@ -1067,25 +1180,23 @@ function send(response, sel, answer, key, extra = {}) {
     return response.status(200).json(out);
 }
 
-// Everything the flow needs for a price has been answered.
-const priceReady = (sel) => !FLOW.blocked(sel) && !pendingField(sel);
+// Every question is answered AND the mechanic has been through the tételek
+// screen, so the numbers on the quote are ones he has actually seen.
+const priceReady = (sel) => !pendingField(sel);
 
-// Move the conversation on one step. When the last question is answered this
-// goes straight to the PRICE - the contact form no longer stands between the
-// customer and the number they came for.
-async function advance(sel, history, response, sessionId, prefix = "") {
-    // The price is never behind the contact form. When details are asked for at
-    // all, they are asked AFTER the number is on screen - see ASK_CONTACT.
-    if (priceReady(sel)) return await finishQuote(sel, history, response, sessionId, prefix);
+async function advance(sel, history, response, ctx, prefix = "") {
+    if (priceReady(sel)) return await finishQuote(sel, history, response, ctx, prefix);
     const step = nextStep(sel);
     return send(response, sel, prefix + step.text, step.key);
 }
 
 function nextStep(sel) {
-    const stop = FLOW.blocked(sel);
-    if (stop) return { text: stop, key: "jobs", reset: ["jobs"] };
     const next = pendingField(sel);
     if (!next) return { text: FORM_INTRO, key: FORM };
+    // The last "question" is not a question at all: it is the priced lines,
+    // rendered as an editable form. It can only be built once everything that
+    // decides WHICH lines exist has been answered, which is why it sits last.
+    if (next === "tetelek") return { text: FORM_INTRO, key: FORM };
     // Several job details still open -> ONE screen for all of them instead of
     // one round trip each. This is what lets the flow ask MORE questions (a
     // chain or a belt, an electric handbrake, a start-stop battery) without
@@ -1135,9 +1246,17 @@ export default async function handler(request, response) {
         if (bad) return response.status(400).json({ answer: bad });
 
         let sel = sanitizeState(body.state);
+        const ctx = {
+            ip,
+            sessionId: String(body.sessionId || ip).slice(0, 64),
+            owner: isOwner(body.ownerKey),
+        };
 
         // --- Opening: the first question, no model call. ---
         if (action === "start") {
+            // The browser says it has already had its quote, or this address
+            // has used up its sessions for the day.
+            if (limited(ctx) && (body.used || quotaBlocked(ctx, null))) return limitResponse(response, {});
             const step = nextStep(sel);
             return send(response, sel, step.text, step.key);
         }
@@ -1155,13 +1274,13 @@ export default async function handler(request, response) {
             if (fb.fb_verdict && !fb.fb_price && !fb.fb_text) {
                 return response.status(200).json({
                     answer: "Kösz. **Mennyiért csinálnád meg nálad?** Ez a leghasznosabb, amit mondhatsz - egy szám is elég.",
-                    chips: [RESTART_CHIP], state: sel, ...progressOf(sel),
+                    chips: moreChips(ctx), state: sel, ...progressOf(sel),
                     form: feedbackForm(sel),
                 });
             }
             return response.status(200).json({
                 answer: "Köszönöm, ez tényleg sokat segít.",
-                chips: [RESTART_CHIP], state: sel, ...progressOf(sel),
+                chips: moreChips(ctx), state: sel, ...progressOf(sel),
                 form: leadForm(sel),
                 feedbackDone: true,
             });
@@ -1171,20 +1290,39 @@ export default async function handler(request, response) {
         if (body.lead) {
             const lead = pickLead(body.lead);
             sel = { ...sel, ...lead };
-            if (!lead.lead_contact) {
+            // A typo'd address is worse than a blank one: it looks answered and
+            // silently goes nowhere. Only the obvious Gmail misspellings are
+            // caught, because anything stricter rejects real addresses.
+            const bad = !lead.lead_contact
+                ? "Ide írj egy telefonszámot vagy e-mail címet, különben nem tudok visszajelezni."
+                : (lead.lead_contact.includes("@") && emailIssue(lead.lead_contact) === "gmail"
+                    ? "Elírás lehet a címben - a Gmail végződése gmail.com." : null);
+            if (bad) {
                 return response.status(200).json({
-                    answer: "", chips: [RESTART_CHIP], state: sel, ...progressOf(sel),
+                    answer: "", chips: moreChips(ctx), state: sel, ...progressOf(sel),
                     form: leadForm(sel),
-                    formErrors: { lead_contact: "Ide írj egy telefonszámot vagy e-mail címet, különben nem tudok visszajelezni." },
+                    formErrors: { lead_contact: bad },
                 });
+            }
+            // One set of details per person per day. He can price as many cars
+            // as he likes - that is what the restart button is for - but the
+            // same tester's contact details should not arrive ten times.
+            if (!rateLimit(`lead:${ip}`, RL_LEAD.limit, RL_LEAD.windowMs).ok) {
+                return send(response, sel, "Ezt már elküldted, megvan - jelentkezem. Közben nyugodtan árazz be további autókat.",
+                    null, { chips: moreChips(ctx) });
             }
             const delivery = sendLeadEmail(sel, history, { sessionId: body.sessionId }).catch(() => {});
             if (hasVercelWaitUntil()) waitUntil(delivery); else await delivery;
             console.log("ÉRDEKLŐDŐ:", JSON.stringify(lead));
             return send(response, sel,
                 `Köszönöm! Jelentkezem a megadott elérhetőségen. Ha addig kérdésed van: **${PHONE}**`,
-                null, { chips: [RESTART_CHIP] });
+                null, { chips: moreChips(ctx) });
         }
+
+        // A browser that has already had its quote may still leave feedback or
+        // its contact details (both handled above) - but not walk the flow again
+        // by typing into the box under the limit message.
+        if (limited(ctx) && body.used && !sessionUsed(ctx)) return limitResponse(response, {});
 
         // --- A one-screen group form submitted (the car, or the job details). ---
         if (body.group) {
@@ -1206,43 +1344,45 @@ export default async function handler(request, response) {
                 });
             }
             const vin = FLOW.vinLooksValid(sel.vin) ? `${FLOW.vinNote(sel.vin, sel)}\n\n` : "";
-            return await advance(sel, history, response, body.sessionId, vin);
+            return await advance(sel, history, response, ctx, vin);
         }
 
-        // --- Contact form submitted. ---
-        if (body.contact) {
+        // --- The tételek screen came back: his numbers over the proposal. ---
+        if (body.tetelek) {
             const pending = pendingField(sel);
-            if (pending) return send(response, sel, questionText(pending, sel), pending);
-            const res = validateContactForm(body.contact);
+            // Anything still genuinely unanswered outranks the line editor -
+            // the lines are built FROM those answers, so they cannot be right
+            // while one is missing.
+            if (pending && pending !== "tetelek") return send(response, sel, questionText(pending, sel), pending);
+            const res = validateTetelek(body.tetelek, sel);
+            sel = { ...sel, ...res.values };
             if (res.errors) {
                 return response.status(200).json({
                     answer: "", chips: [], state: sel, ...progressOf(sel),
-                    form: contactForm({ ...sel, ...pickContact(body.contact) }),
+                    form: tetelekForm(sel),
                     formErrors: res.errors,
                 });
             }
-            sel = { ...sel, ...res.values };
-            // One set of details per person per day. Pricing another car is
-            // fine and encouraged - that is what the restart button is for -
-            // but the same person's name and e-mail should not arrive five
-            // times, and one tester should not refill the inbox.
-            const fresh = rateLimit(`lead:${ip}`, RL_LEAD.limit, RL_LEAD.windowMs).ok;
-            return await finishQuote(sel, history, response, body.sessionId, "", fresh);
+            return await finishQuote(sel, history, response, ctx, "");
         }
 
         const text = typeof question === "string" ? question.trim() : "";
 
-        // "Másik autóra is kérek árat" - wipe the slate and start again. Without
-        // this the conversation simply stopped after one quote.
         if (text && isRestart(text)) {
+            if (sessionUsed(ctx)) return limitResponse(response, sel);
             const fresh = {};
             const step = nextStep(fresh);
-            return send(response, fresh, "Rendben, kezdjük elölről.\n\n" + step.text, step.key);
+            return send(response, fresh, "Rendben, jöhet a következő autó.\n\n" + step.text, step.key);
+        }
+        // "Tételek módosítása" - back into the line editor with everything he
+        // typed last time still in the boxes.
+        if (text && isEdit(text) && !pendingField(sel)) {
+            return send(response, sel, "Tessék, itt vannak a tételek.", FORM);
         }
 
         const field = pendingField(sel);
         if (!text) {
-            const step = field ? { text: questionText(field, sel), key: field } : (contactReady(sel) ? { text: "", key: null } : { text: FORM_INTRO, key: FORM });
+            const step = field ? { text: questionText(field, sel), key: field } : { text: "", key: null };
             return send(response, sel, step.text, step.key);
         }
 
@@ -1251,19 +1391,12 @@ export default async function handler(request, response) {
             const v = mapAnswer(field, text, sel);
             if (v) {
                 sel = { ...sel, [field]: v };
-                // A job the shop does not do stops here: no price, no lead.
-                const stop = FLOW.blocked(sel);
-                if (stop) {
-                    const cleared = { ...sel };
-                    delete cleared.jobs;
-                    return send(response, cleared, stop, "jobs");
-                }
-                return await advance(sel, history, response, body.sessionId, ackText(field, sel) + "\n\n");
+                return await advance(sel, history, response, ctx, ackText(field, sel) + "\n\n");
             }
         }
 
         // --- Everything else goes to the model. ---
-        const mode = field ? "question" : (contactReady(sel) ? "done" : "form");
+        const mode = field && field !== "tetelek" ? "question" : (priceReady(sel) ? "done" : "form");
         const ai = await askModel(sel, history, text, field, mode);
         const reading = ai.ok ? interpretModel(ai.text, mode === "question" ? field : null, sel) : null;
 
@@ -1274,7 +1407,7 @@ export default async function handler(request, response) {
                     field);
             }
             if (mode === "form") {
-                return send(response, sel, `Töltsd ki a rövid űrlapot, és rögtön mutatom az árat.`, FORM);
+                return send(response, sel, `Nézd át a tételeket lent, és írd át, ami nálad más.`, FORM);
             }
             return send(response, sel, `Erre most nem tudok válaszolni - hívj nyugodtan: **${PHONE}**.`, null);
         }
@@ -1286,12 +1419,6 @@ export default async function handler(request, response) {
                 // same time, so "Passat 2.0 TDI, 2012-es" skips three questions
                 // instead of answering one.
                 sel = { ...sel, ...reading.extra, [field]: reading.value };
-                const stop = FLOW.blocked(sel);
-                if (stop) {
-                    const cleared = { ...sel };
-                    delete cleared.jobs;
-                    return send(response, cleared, stop, "jobs");
-                }
                 // The next question follows from the backend, so a trailing
                 // question the model tacked on would sit right above it and read
                 // as a second question.
@@ -1303,7 +1430,7 @@ export default async function handler(request, response) {
                 const picked = Object.keys(reading.extra)
                     .map((k) => `${textOf(fieldDef(k).short, sel)}: **${labelFor(k, sel[k], sel)}**`);
                 const alsoGot = picked.length ? `\nEzt is kiolvastam belőle - ${picked.join(", ")}.` : "";
-                return await advance(sel, history, response, body.sessionId, said + vin + alsoGot + "\n\n");
+                return await advance(sel, history, response, ctx, said + vin + alsoGot + "\n\n");
             }
             const reasked = /\*\*[^*]*\?\*\*/.test(reading.said) || norm(reading.said).includes(norm(q));
             return send(response, sel, reasked ? reading.said : `${reading.said}\n\n${questionText(field, sel)}`, field);
@@ -1315,82 +1442,63 @@ export default async function handler(request, response) {
     }
 }
 
-function pickContact(c) {
-    const out = {};
-    if (!c || typeof c !== "object") return out;
-    for (const k of CONTACT_KEYS) if (has(c, k)) out[k] = oneLine(c[k]).slice(0, 200);
-    return out;
-}
-
 // ---------------------------------------------------------------------------
-//  Deliver the finished quote: the customer's bubbles, the owner's card, the
-//  arithmetic panel and the feedback form, plus the owner e-mail.
+//  Deliver the finished quote: the mechanic's itemised view, the copyable
+//  customer version, the arithmetic panel and the feedback form.
 // ---------------------------------------------------------------------------
-async function finishQuote(sel, history, response, sessionId, prefix = "", emailLead = false) {
+async function finishQuote(sel, history, response, ctx, prefix = "") {
+    // A second, different car in the same session - or a new session from an
+    // address that has used its allowance - gets the limit message, not a quote.
+    if (quotaBlocked(ctx, sel)) return limitResponse(response, sel);
+    quotaRecord(ctx, sel);
     const quote = assembleQuote(sel);
-    // Only the customer's own bubbles go in `answer`. Everything the PROTOTYPE
-    // adds - the workshop's card, the live-version note, the feedback form -
-    // is sent separately and rendered below a divider, because the single
-    // biggest complaint about the old ending was that seven blocks arrived at
-    // once with nothing saying where the quote stopped and the demo started.
-    const answer = renderCustomerQuote(quote, sel);
+    const answer = renderQuote(quote, sel);
+    const customer = customerText(quote, sel);
 
     console.log("\n========================================");
-    console.log(`ÚJ ÁRAJÁNLAT - ${quote.title}`);
-    console.log(`Autó: ${FLOW.carLine(sel)} | Alvázszám: ${FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : "-"} | Rendszám: ${sel.plate || "-"}`);
-    console.log(`Ügyfél: ${sel.name} | ${sel.phone} | ${sel.email}`);
-    console.log(`${quote.diagnosticOnly ? "Diagnosztika" : "Alapár"}: ${formatHuf(quote.total)}`);
+    console.log(`KÉSZ AJÁNLAT - ${quote.title}`);
+    console.log(`Autó: ${FLOW.carLine(sel)} | Alvázszám: ${FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : "-"} | Rendszám: ${sel.plate && sel.plate !== SKIP ? sel.plate : "-"}`);
+    console.log(`Szerviz: ${FLOW.SHOP.name} | óradíj ${formatHuf(FLOW.SHOP.rates.altalanos)}`);
+    console.log(`Nettó ${formatHuf(quote.net)} | Bruttó ${formatHuf(quote.total)} | átírt sorok: ${quote.edited}`);
     console.log("========================================\n");
 
-    const owner = renderOwnerCard(quote, sel);
     const transcript = [
         ...(Array.isArray(history) ? history : []),
-        { role: "assistant", content: [answer, owner].join("\n\n") },
+        { role: "assistant", content: answer },
     ];
-    // Mailed when somebody actually handed over their details (once per person
-    // per day), or always in a real workshop where every quote is a lead.
-    if (emailLead || EMAIL_QUOTES) {
+    // Still off by default. A prototype in a Facebook group generated 25 quotes
+    // in a day and filled the sending quota with telemetry; a real workshop
+    // turns it on with EMAIL_QUOTES=on and gets a copy of everything it issues.
+    if (EMAIL_QUOTES) {
         const delivery = sendQuoteEmail(sel, quote, transcript).catch(() => {});
         if (hasVercelWaitUntil()) waitUntil(delivery); else if (process.env.VERCEL) await delivery;
     }
 
-    // Stage one: the number, and only then the question of who it is for. The
-    // workshop's card waits until there is a name to put on it.
-    if (ASK_CONTACT && !contactReady(sel)) {
-        return response.status(200).json({
-            answer: prefix + answer,
-            chips: [],
-            state: sel,
-            ...progressOf(sel),
-            scope: scopePanel(quote),
-            form: contactForm(sel),
-        });
-    }
-
     return response.status(200).json({
         answer: prefix + answer,
-        // The one affordance the first tester found missing: a way to run
-        // another car without reloading the page.
-        chips: [RESTART_CHIP],
+        chips: [EDIT_CHIP, ...moreChips(ctx)],
         state: sel,
         done: true,
         ...progressOf(sel),
-        scope: scopePanel(quote),
-        quick: {
-            question: "Szerelő vagy? Stimmel ez az ár?",
-            note: "Egy koppintás, és utána leírhatod, mennyiért csinálnád meg nálad.",
-            chips: QUICK_VERDICTS,
+        // The document he actually hands over, as copyable plain text. This is
+        // the output of the whole exercise: everything above it is the tool
+        // working out the number, this is the thing the customer receives.
+        customer: {
+            title: "Az ügyfélnek átadható ajánlat",
+            note: "Ezt másolhatod e-mailbe, Messengerbe vagy nyomtatható levélbe. Nettó/bruttó bontással, a belső számolás nélkül.",
+            text: customer,
+            copy: "Másolás",
+            copied: "Kimásolva",
         },
-        // Everything below the divider is the demo talking, not the quote.
+        scope: notesPanel(quote),
         demo: {
-            divider: "Eddig tart, amit egy ügyfél lát.",
-            intro: "Innentől azt mutatom, amit te kapnál meg szervizként.",
-            owner,
+            divider: "Eddig tart maga az ajánlat.",
+            intro: "Innentől a prototípusról van szó, nem az ügyfélről.",
             workings: workingsPanel(quote),
             live: liveVersionPanel(sel, quote),
         },
         form: feedbackForm(sel),
-        lead: { title: quote.title, total: quote.total, diagnosticOnly: quote.diagnosticOnly },
+        lead: { title: quote.title, total: quote.total, net: quote.net, edited: quote.edited },
     });
 }
 
@@ -1438,54 +1546,61 @@ function detailRows(sel) {
     return summaryPairs(sel).map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;color:#666">${esc(k)}</td><td style="padding:4px 0"><b>${esc(v)}</b></td></tr>`).join("");
 }
 
+// The shop's own copy of a quote it has just issued. Not a lead any more - the
+// workshop IS the user here - so it is filed, not sold: the itemised lines, the
+// text the customer got, and the arithmetic behind both.
 async function sendQuoteEmail(sel, quote, transcript) {
-    const plate = has(sel, "plate") ? `${oneLine(sel.plate)}${plateIsHungarian(sel.plate) ? "" : " (nem magyar rendszám)"}` : "-";
-    const lines = quote.items.map((i) => `<tr><td style="padding:4px 12px 4px 0">${esc(i.label)}</td><td style="padding:4px 0;text-align:right"><b>${esc(formatHuf(i.amount))}</b></td></tr>`).join("");
+    const val = (k) => (has(sel, k) && sel[k] !== SKIP ? oneLine(sel[k]) : "-");
+    const plate = has(sel, "plate") && sel.plate !== SKIP
+        ? `${oneLine(sel.plate)}${plateIsHungarian(sel.plate) ? "" : " (nem magyar rendszám)"}` : "-";
+    const lines = quote.items.map((i) => `<tr><td style="padding:4px 12px 4px 0">${esc(i.label)}${i.edited ? ' <span style="color:#999">(átírva)</span>' : ""}</td><td style="padding:4px 0;text-align:right"><b>${esc(formatHuf(i.amount))}</b></td></tr>`).join("");
+    const totals = quote.vatRate > 0
+        ? `<tr><td style="padding:8px 12px 2px 0;border-top:1px solid #ddd">Nettó</td><td style="padding:8px 0 2px;border-top:1px solid #ddd;text-align:right">${esc(formatHuf(quote.net))}</td></tr>
+           <tr><td style="padding:2px 12px 2px 0">ÁFA (27%)</td><td style="padding:2px 0;text-align:right">${esc(formatHuf(quote.vat))}</td></tr>
+           <tr><td style="padding:2px 12px 4px 0"><b>Bruttó végösszeg</b></td><td style="padding:2px 0 4px;text-align:right"><b>${esc(formatHuf(quote.total))}</b></td></tr>`
+        : `<tr><td style="padding:8px 12px 4px 0;border-top:1px solid #ddd"><b>Végösszeg</b> (alanyi adómentes)</td><td style="padding:8px 0 4px;border-top:1px solid #ddd;text-align:right"><b>${esc(formatHuf(quote.total))}</b></td></tr>`;
     const html = `
 <div style="font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;max-width:640px">
-  <h2 style="margin:0 0 4px">${quote.diagnosticOnly ? "Diagnosztikai időpont" : "Új árajánlat"} - ${esc(quote.title)}</h2>
-  <p style="margin:0 0 16px;color:#666">Prototípus, minta árakkal. ${esc(FLOW.SAMPLE_NOTICE)}</p>
-  <h3 style="margin:16px 0 4px">Az autó és az ügyfél</h3>
+  <h2 style="margin:0 0 4px">Kiadott ajánlat - ${esc(quote.title)}</h2>
+  <p style="margin:0 0 16px;color:#666">${esc(FLOW.SHOP.name)} · óradíj ${esc(formatHuf(FLOW.SHOP.rates.altalanos))}/óra</p>
+  <h3 style="margin:16px 0 4px">Az autó</h3>
   <table style="border-collapse:collapse;font-size:14px">
     <tr><td style="padding:4px 12px 4px 0;color:#666">Autó</td><td style="padding:4px 0"><b>${esc(FLOW.carLine(sel))}</b></td></tr>
-    <tr><td style="padding:4px 12px 4px 0;color:#666">Alvázszám</td><td style="padding:4px 0"><b>${esc(FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : "nem adta meg")}</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#666">Alvázszám</td><td style="padding:4px 0"><b>${esc(FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : "-")}</b></td></tr>
     <tr><td style="padding:4px 12px 4px 0;color:#666">Rendszám</td><td style="padding:4px 0"><b>${esc(plate)}</b></td></tr>
-    <tr><td style="padding:4px 12px 4px 0;color:#666">Név</td><td style="padding:4px 0"><b>${esc(sel.name)}</b></td></tr>
-    <tr><td style="padding:4px 12px 4px 0;color:#666">Telefon</td><td style="padding:4px 0"><b>${esc(sel.phone)}</b></td></tr>
-    <tr><td style="padding:4px 12px 4px 0;color:#666">E-mail</td><td style="padding:4px 0"><b>${esc(sel.email || "-")}</b></td></tr>
-    <tr><td style="padding:4px 12px 4px 0;color:#666">Mikor jó</td><td style="padding:4px 0"><b>${esc([sel.when_pref, sel.when_note].filter(Boolean).join(", ") || "-")}</b></td></tr>
+    <tr><td style="padding:4px 12px 4px 0;color:#666">Ügyfél</td><td style="padding:4px 0"><b>${esc(val("ugyfel"))}</b></td></tr>
   </table>
-  <h3 style="margin:16px 0 4px">Az ajánlat</h3>
-  <table style="border-collapse:collapse;font-size:14px;width:100%">${lines}
-    <tr><td style="padding:8px 12px 4px 0;border-top:1px solid #ddd">${quote.diagnosticOnly ? "Diagnosztika" : "Alapár"}</td>
-        <td style="padding:8px 0 4px;border-top:1px solid #ddd;text-align:right"><b>${esc(formatHuf(quote.total))}${quote.diagnosticOnly ? "" : "-tól"}</b></td></tr>
-  </table>
-  <p style="margin:4px 0 16px;color:#666;font-size:13px">Bruttó ár, az ÁFA-t tartalmazza. Tájékoztató ár, a szerviz erősíti meg.</p>
+  <h3 style="margin:16px 0 4px">Tételek (nettó)</h3>
+  <table style="border-collapse:collapse;font-size:14px;width:100%">${lines}${totals}</table>
+  <h3 style="margin:16px 0 4px">Amit az ügyfél kapott</h3>
+  <pre style="font-size:13px;background:#f6f6f6;padding:12px;white-space:pre-wrap">${esc(customerText(quote, sel))}</pre>
   <h3 style="margin:16px 0 4px">Minden válasz</h3>
   <table style="border-collapse:collapse;font-size:14px">${detailRows(sel)}</table>
-  <h3 style="margin:16px 0 4px">Miből jött ki (bruttó, ÁFA-val)</h3>
+  <h3 style="margin:16px 0 4px">Miből jött ki (nettó)</h3>
   <ul style="font-size:13px;color:#444">${quote.workings.map((w) => `<li>${esc(plain(w))}</li>`).join("")}</ul>
   <h3 style="margin:16px 0 4px">A teljes beszélgetés</h3>
   ${transcriptHtml(transcript)}
 </div>`;
     const text = [
-        `${quote.diagnosticOnly ? "DIAGNOSZTIKA" : "ÚJ ÁRAJÁNLAT"} - ${quote.title}`,
+        `KIADOTT AJÁNLAT - ${quote.title}`,
+        `Szerviz: ${FLOW.SHOP.name} | óradíj ${formatHuf(FLOW.SHOP.rates.altalanos)}/óra`,
         `Autó: ${FLOW.carLine(sel)}`,
-        `Alvázszám: ${FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : "-"} | Rendszám: ${plate}`,
-        `Ügyfél: ${sel.name} | ${sel.phone} | ${sel.email || "-"}`,
+        `Alvázszám: ${FLOW.vinLooksValid(sel.vin) ? cleanVin(sel.vin) : "-"} | Rendszám: ${plate} | Ügyfél: ${val("ugyfel")}`,
         ``,
-        ...quote.items.map((i) => `${i.label}: ${formatHuf(i.amount)}`),
-        `${quote.diagnosticOnly ? "Diagnosztika" : "Alapár"}: ${formatHuf(quote.total)}`,
+        ...quote.items.map((i) => `${i.label}: ${formatHuf(i.amount)}${i.edited ? " (átírva)" : ""}`),
+        `Nettó: ${formatHuf(quote.net)}${quote.vatRate > 0 ? ` | ÁFA: ${formatHuf(quote.vat)} | Bruttó: ${formatHuf(quote.total)}` : " (alanyi adómentes)"}`,
         ``,
-        "Miből jött ki (bruttó, ÁFA-val):",
+        "Amit az ügyfél kapott:",
+        customerText(quote, sel),
+        ``,
+        "Miből jött ki (nettó):",
         ...quote.workings.map((w) => `- ${plain(w)}`),
         ``,
         transcriptText(transcript),
     ].join("\n");
     return await resendSend({
-        subject: `[MINTA ÁRAJÁNLAT] ${quote.title} - ${formatHuf(quote.total)}`,
+        subject: `[AJÁNLAT] ${quote.title} - ${formatHuf(quote.total)}`,
         html, text,
-        replyTo: emailIssue(sel.email) ? undefined : sel.email,
     });
 }
 
@@ -1591,4 +1706,4 @@ async function runSelfTest(request, response, ip) {
     });
 }
 
-export { assembleQuote, renderCustomerQuote, renderOwnerCard, workingsPanel, mapAnswer, sanitizeState, pendingField, projectOrder, formatHuf };
+export { assembleQuote, renderQuote, customerText, tetelekForm, validateTetelek, workingsPanel, mapAnswer, sanitizeState, pendingField, projectOrder, formatHuf, SKIP };

@@ -5,20 +5,22 @@
   // ---------------------------------------------------------------------------
   const BOT = {
     id: "autoszerviz-minta",
-    subtitle: "Automata árajánlatkészítő",
+    subtitle: "Árajánlat-készítő szerelőknek",
     phone: "+36 70 250 1739",
     // The framing has to live HERE, not on the page behind it: the chat opens
-    // itself, so the landing page headline is never read. The first Facebook
-    // thread measured this - mechanics assumed the tool was for THEM, compared
-    // it to Autodata, and concluded it was pointless. It is not a quoting tool
-    // for a workshop; it is the thing that answers the workshop's customer.
-    greeting: "Szia! Képzeld el, hogy este 11-kor ír valaki a szerviz oldalára, hogy **mennyibe kerül egy kuplungcsere**.\n\nÉn válaszolok helyette: végigkérdezem, ami az árhoz kell, és reggel **kész ajánlat várja a szervizt**, az ügyfél számával együtt.\n\n**Most te vagy az ügyfél.** Közben bármit megkérdezhetsz.",
-    hint: "Kérdezz bátran - pl. mi van benne az árban",
+    // itself, so the landing page headline is never read. The first version of
+    // this tool was aimed at the workshop's CUSTOMER, and every mechanic who
+    // tried it said the same thing - a rough price given before anyone saw the
+    // car is not worth having. So it was turned round: this one is for the
+    // mechanic, and it starts where his knowledge starts, with the car already
+    // on the lift.
+    greeting: "Szia! Ez **neked készült, nem az ügyfelednek**.\n\nMár láttad az autót, tudod mi a munka - innentől az ajánlat összerakása adminisztráció. Azt viszem: normaidő, alkatrész, apróanyag, ÁFA, és a végén egy **kimásolható ajánlat** az ügyfélnek.\n\nEz egy **minta szerviz** piaci átlagárakkal. A tiédet én építem meg, a te óradíjaddal és árlistáddal - neked semmit nem kell beállítani.",
+    hint: "Írj bátran - pl. „ez a munka nálam 3 óra”",
     teasers: [
-      "Mennyibe kerül a vezérműszíj csere?",
-      "Fékbetét, kuplung, olajcsere? Számoljunk!",
-      "Pár kérdés, és látod az árat.",
-      "Nem tudod, mi a baja? Segítek.",
+      "Árazz be egy kuplungcserét 2 perc alatt.",
+      "A te áraiddal építem meg, nem kell beállítani.",
+      "Minden tétel átírható, mielőtt kiadod.",
+      "Kész ajánlat, kimásolható az ügyfélnek.",
     ],
   };
 
@@ -48,8 +50,8 @@
     callAria: "Hívás",
     placeholder: "Írd be a válaszod, vagy kérdezz…",
     inputAria: "Válasz vagy kérdés",
-    dialogAria: "Autószerviz árajánlatkészítő",
-    concept: "Minta árakkal fut. A végleges árat a szerviz erősíti meg, miután látta az autót.",
+    dialogAria: "Autószerviz árajánlat-készítő",
+    concept: "Minta szerviz, piaci átlagárakkal. A tiédbe a te óradíjad és árlistád kerül - azt én építem be.",
     next: "Tovább",
     errGeneric: "Elnézést, hiba történt. Próbáld újra, vagy hívj: " + PHONE,
     errConnect: "Elnézést, nem sikerült kapcsolódni. Próbáld újra, vagy hívj: " + PHONE,
@@ -101,7 +103,23 @@
   let conversationHistory = []; // [{ role: "user"|"assistant", content }]
   let convState = {};           // answers so far, carried turn to turn
   let started = false;
+
   let quoteDone = false;
+
+  // --- One quote per person (the group demo) -----------------------------------
+  // Once a quote is finished, this browser remembers it, and every later visit
+  // opens on the "már kipróbáltad" message instead of a fresh flow. The server
+  // backs this up (see ONE_QUOTE in api/faq-agent.js). Opening the page as
+  // ?teszt=<OWNER_KEY> skips all of it, so the owner can keep testing.
+  const USED_KEY = BOT.id + "_used";
+  let ownerKey = "";
+  try {
+    const q = new URLSearchParams(location.search).get("teszt");
+    if (q) sessionStorage.setItem(BOT.id + "_owner", q);
+    ownerKey = sessionStorage.getItem(BOT.id + "_owner") || "";
+  } catch (e) {}
+  let usedFlag = false;
+  try { usedFlag = !ownerKey && localStorage.getItem(USED_KEY) === "1"; } catch (e) {}
   let formEl = null;
   let progressFillEl = null, progressLabelEl = null, progressBarEl = null;
   let lastProgress = 0, lastProgressTotal = 0;
@@ -465,6 +483,28 @@
     if (messagesContainer) messagesContainer.querySelectorAll(".faq-chips").forEach((c) => c.remove());
   }
 
+  // The buttons under a finished quote. They cannot live in the ordinary chip
+  // row: the feedback form arrives in the same response, and rendering a form
+  // clears the chips - so "Tételek módosítása" and "Új ajánlat" were silently
+  // wiped the moment they appeared. This row sits right under the quote and
+  // only goes away when one of its own buttons is used.
+  function renderActions(chips) {
+    if (!chips || !chips.length) return;
+    const wrap = document.createElement("div");
+    wrap.className = "faq-actions";
+    chips.forEach((label) => {
+      const chip = makeChip(label);
+      chip.onclick = () => {
+        if (sending) return;
+        messagesContainer.querySelectorAll(".faq-actions").forEach((a) => a.remove());
+        clearContactForm();
+        sendMessage(label);
+      };
+      wrap.appendChild(chip);
+    });
+    messagesContainer.appendChild(wrap);
+  }
+
   function makeChip(label) {
     const chip = document.createElement("button");
     chip.type = "button";
@@ -632,49 +672,67 @@
 
   function renderDemo(demo) {
     renderDivider(demo.divider, demo.intro);
-    if (demo.owner) {
-      const card = document.createElement("div");
-      card.className = "faq-owner";
-      card.innerHTML = renderMarkdown(demo.owner);
-      messagesContainer.appendChild(card);
-    }
     if (demo.workings) renderWorkings(demo.workings);
     if (demo.live) renderLive(demo.live);
     scrollToBottom();
   }
 
-  // One tap, directly under the price. The full feedback form opens only
-  // after somebody has already answered once.
-  function renderQuick(q) {
+  // The finished document, as plain text with a copy button. This is the whole
+  // point of a quoting tool and the one thing the mechanic actually leaves
+  // with, so it is shown in full rather than folded away - and it is a real
+  // <textarea>, so selecting it by hand works where the clipboard API does not.
+  function renderCustomerQuote(c) {
     const box = document.createElement("div");
-    box.className = "faq-quick";
+    box.className = "faq-customer";
+
+    const head = document.createElement("div");
+    head.className = "faq-customer-head";
     const t = document.createElement("div");
-    t.className = "faq-quick-title";
-    t.textContent = q.question || "";
-    box.appendChild(t);
-    const row = document.createElement("div");
-    row.className = "faq-quick-row";
-    (q.chips || []).forEach((label) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "faq-quick-chip";
-      b.textContent = label;
-      b.onclick = () => {
-        if (sending) return;
-        box.remove();
-        addMessage("user", label);
-        conversationHistory.push({ role: "user", content: label });
-        post({ feedback: { fb_verdict: label }, history: conversationHistory, state: convState }, true);
-      };
-      row.appendChild(b);
-    });
-    box.appendChild(row);
-    if (q.note) {
-      const nt = document.createElement("div");
-      nt.className = "faq-quick-note";
-      nt.textContent = q.note;
-      box.appendChild(nt);
+    t.className = "faq-customer-title";
+    t.textContent = c.title || "Az ügyfélnek átadható ajánlat";
+    head.appendChild(t);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "faq-customer-copy";
+    btn.textContent = c.copy || "Másolás";
+    head.appendChild(btn);
+    box.appendChild(head);
+
+    if (c.note) {
+      const n = document.createElement("div");
+      n.className = "faq-customer-note";
+      n.textContent = c.note;
+      box.appendChild(n);
     }
+
+    const ta = document.createElement("textarea");
+    ta.className = "faq-customer-text";
+    ta.readOnly = true;
+    ta.rows = Math.min(24, String(c.text || "").split("\n").length + 1);
+    ta.value = c.text || "";
+    box.appendChild(ta);
+
+    btn.onclick = () => {
+      const done = () => {
+        btn.textContent = c.copied || "Kimásolva";
+        btn.classList.add("is-done");
+        setTimeout(() => {
+          btn.textContent = c.copy || "Másolás";
+          btn.classList.remove("is-done");
+        }, 2000);
+      };
+      // navigator.clipboard needs a secure context and a permission that a
+      // widget embedded in someone else's page may not have, so the old
+      // execCommand path stays as the fallback rather than failing silently.
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(done, () => { ta.select(); document.execCommand("copy"); done(); });
+      } else {
+        ta.select();
+        try { document.execCommand("copy"); done(); } catch (e) {}
+      }
+    };
+
     messagesContainer.appendChild(box);
     scrollToBottom();
   }
@@ -850,16 +908,48 @@
         input.rows = 3;
         input.placeholder = f.placeholder || "";
         input.value = f.value || "";
+      } else if (f.type === "number") {
+        // Hours and forints. type=number rather than text, so a phone brings up
+        // the number pad - the tételek screen is nothing but numbers, and a
+        // mechanic filling it in on a phone in the workshop is the normal case.
+        input = document.createElement("input");
+        input.type = "number";
+        input.inputMode = f.decimal ? "decimal" : "numeric";
+        input.step = f.decimal ? "0.1" : "1";
+        input.min = "0";
+        input.placeholder = f.placeholder || "";
+        input.value = f.value || "";
       } else {
         input = document.createElement("input");
         input.type = f.type || "text";
         input.placeholder = f.placeholder || "";
         input.value = f.value || "";
         if (f.autocomplete) input.autocomplete = f.autocomplete;
-        if (f.key === "phone") input.inputMode = "tel";
       }
       input.className = "faq-form-input ph-no-capture";
-      row.appendChild(input);
+
+      // A unit belongs beside the box, not inside the label: "3" and "3 óra"
+      // are different claims, and the mechanic has to see which one he typed.
+      if (f.unit) {
+        const wrapUnit = document.createElement("span");
+        wrapUnit.className = "faq-form-unitwrap";
+        wrapUnit.appendChild(input);
+        const u = document.createElement("span");
+        u.className = "faq-form-unit";
+        u.textContent = f.unit;
+        wrapUnit.appendChild(u);
+        row.appendChild(wrapUnit);
+      } else {
+        row.appendChild(input);
+      }
+
+      // What the engine proposed, kept visible next to what he typed over it.
+      if (f.note) {
+        const nt = document.createElement("span");
+        nt.className = "faq-form-note";
+        nt.textContent = f.note;
+        row.appendChild(nt);
+      }
 
       // Nobody testing a prototype from their sofa wants to type their own
       // number plate, so a field that offers a sample gets a one-tap filler.
@@ -878,6 +968,57 @@
       inputs[f.key] = { input: input, err: err, row: row };
       wrap.appendChild(row);
     });
+
+    // "+ Új tétel". The one thing a fixed job list can never cover: the seized
+    // bolt, the test fee, the tyre itself. Without this the mechanic would hit
+    // the first thing his own quote needs and the tool would have nothing to
+    // say - which is exactly the limit every fixed-catalogue quoting tool has.
+    if (form.allowExtras) {
+      let next = form.extraFrom || 0;
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "faq-form-add";
+      add.textContent = "+ Új tétel";
+      add.onclick = () => {
+        const i = next++;
+        const mk = (key, label, opts) => {
+          const r = document.createElement("label");
+          r.className = "faq-form-row";
+          const l = document.createElement("span");
+          l.className = "faq-form-label";
+          l.textContent = label;
+          r.appendChild(l);
+          const inp = document.createElement("input");
+          inp.className = "faq-form-input ph-no-capture";
+          inp.type = opts.number ? "number" : "text";
+          if (opts.number) { inp.inputMode = "numeric"; inp.step = "1"; inp.min = "0"; }
+          inp.placeholder = opts.placeholder || "";
+          if (opts.unit) {
+            const w = document.createElement("span");
+            w.className = "faq-form-unitwrap";
+            w.appendChild(inp);
+            const u = document.createElement("span");
+            u.className = "faq-form-unit";
+            u.textContent = opts.unit;
+            w.appendChild(u);
+            r.appendChild(w);
+          } else {
+            r.appendChild(inp);
+          }
+          const e = document.createElement("span");
+          e.className = "faq-form-err";
+          r.appendChild(e);
+          inputs[key] = { input: inp, err: e, row: r };
+          wrap.insertBefore(r, add);
+          return inp;
+        };
+        const first = mk("xlabel:" + i, "Saját tétel", { placeholder: "pl. Beszorult csavar kifúrása" });
+        mk("xar:" + i, "Nettó ára", { number: true, unit: "Ft", placeholder: "pl. 8000" });
+        try { first.focus(); } catch (e) {}
+        scrollToBottom();
+      };
+      wrap.appendChild(add);
+    }
 
     const btn = document.createElement("button");
     btn.type = "submit";
@@ -920,14 +1061,17 @@
     if (sending) return;
     // The feedback form posts under its own key, so the backend can tell a
     // mechanic's verdict from a customer's contact details.
-    const ACTIONS = { feedback: 1, group: 1, contact: 1, lead: 1 };
-    const key = form && ACTIONS[form.action] ? form.action : "contact";
+    const ACTIONS = { feedback: 1, group: 1, tetelek: 1, lead: 1 };
+    const key = form && ACTIONS[form.action] ? form.action : "tetelek";
     const ECHO = {
       feedback: ["fb_verdict", "fb_price", "fb_text"],
       // A group form echoes every answer, so the transcript reads like the
       // conversation it replaced rather than jumping straight to the price.
       group: Object.keys(values),
-      contact: ["name", "phone", "email"],
+      // The line editor does NOT echo: thirty numbers pasted into the
+      // transcript as one bubble is noise, and the quote right underneath
+      // already shows every one of them.
+      tetelek: [],
       lead: ["lead_name", "lead_contact", "lead_shop"],
     };
     const shown = ECHO[key].map((k) => values[k]).filter(Boolean).join(" · ");
@@ -969,7 +1113,7 @@
       const res = await fetch(apiUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({ sessionId: sessionId }, payload)),
+        body: JSON.stringify(Object.assign({ sessionId: sessionId }, ownerKey ? { ownerKey: ownerKey } : {}, usedFlag ? { used: true } : {}, payload)),
       });
       removeThinking();
       if (!res.ok) {
@@ -993,6 +1137,10 @@
       if (data.formErrors) return data; // caller re-renders the form
       if (onAccepted) onAccepted(data);
 
+      // Marked for FUTURE visits only: this session carries on as normal, so
+      // re-opening the line editor on the same quote still works.
+      if (data.done && !ownerKey) { try { localStorage.setItem(USED_KEY, "1"); } catch (e) {} }
+      if (data.limited) usedFlag = true;
       if (data.done && !quoteDone) {
         quoteDone = true;
         const l = data.lead || {};
@@ -1003,12 +1151,13 @@
       parts.forEach((p) => addMessage("bot", p));
       if (parts.length) conversationHistory.push({ role: "assistant", content: parts.join("\n\n") });
 
-      if (data.quick) renderQuick(data.quick);
+      if (data.customer) renderCustomerQuote(data.customer);
+      if (data.done) renderActions(data.chips);
       if (data.scope) renderWorkings(data.scope, "faq-scope");
       if (data.demo) renderDemo(data.demo);
       if (data.form) renderContactForm(data.form);
       else if (data.multi) renderMultiChips(data.chips, data.exclusive, data.next);
-      else renderChips(data.chips);
+      else if (!data.done) renderChips(data.chips);
 
       armIdleFlush();
       return data;

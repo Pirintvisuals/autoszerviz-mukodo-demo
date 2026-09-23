@@ -1,240 +1,67 @@
-# Automata árajánlatkészítő autószervizeknek - működő prototípus
+# Árajánlat-készítő szerelőknek - működő prototípus
 
-Egy chat, ami végigkérdezi az autóst, és a végén **tételes javítási becslést** ad
-(alkatrész + munkadíj), vagy - ha a baj csak tünet - **nem ad árat**, hanem
-diagnosztikát ajánl. A szerviz megkapja a kész ajánlatot és az ügyfél adatait.
+**A szerelőnek készült, nem az ügyfélnek.** Az használja, aki már látta az
+autót, tudja mi a munka, és most az ajánlat összerakása van hátra: normaidő,
+alkatrész, apróanyag, ÁFA, és egy papír, amit az ügyfél megkap.
 
-Ez a build **szerelőknek készült, hogy kipróbálják és megpróbálják eltörni.**
-Nincs regisztráció és nincs e-mail-kapu; a lényeg a tesztelés, nem a lead-gyűjtés.
+## Miért fordult meg
 
-> A NM Bau és a Banacraft botok testvére. A motor a Banacraft-vonal leánya
-> (backend vezeti a beszélgetést, az AI csak a beírt szöveget értelmezi), a
-> szakmai tartalom viszont teljesen új.
-
----
+Az első változat az autós ügyfélnek adott hozzávetőleges, „X Ft-tól" árat a
+szerviz weboldalán. A szerelői csoportokból egyöntetűen az jött vissza, hogy
+ennek nincs értéke: árat akkor lehet mondani, ha valaki megnézte a kocsit, és
+egy előre kiadott becslést az ügyfél később számon kér. Ez a változat ezért ott
+kezdi, ahol a szerelő tudása kezdődik - az autó már a hídon volt.
 
 ## Hogyan működik
 
-```
-public/widget.js   ──POST──►  api/faq-agent.js  ──►  lib/flow.js   = kérdések + ár
-   (chat UI)                        │                lib/cars.js   = autókatalógus
-                                    ├──►  Gemini / OpenAI   = CSAK a beírt szöveg értelmezése
-                                    └──►  Resend            = e-mail a tulajdonosnak
-```
+**A szerviznek semmit nem kell beállítania.** Minden ügyfélnek én építem meg a
+saját változatát: óradíjak, ÁFA-státusz, szervizneve (`SHOP` a
+`lib/flow.js`-ben), árlista és normaidők (`A`, `N`), munkák listája. Ez a
+build egy **minta szerviz**, piaci átlagárakkal.
 
-**A backend vezeti a beszélgetést.** Ő dönti el, mi a következő kérdés, ő
-fogalmazza meg, ő rakja ki a gombjait, és ő képezi le a választ egy értékre.
-Egy gombnyomás soha nem kerül egy modellhívásba, ezért a bot azonnal válaszol,
-és nem tud kicsúszni a saját gombjaival a szinkronból.
+1. **Munka és autó.** Márka / típus / motor gépelve kiegészül, alvázszám
+   opcionális (ráírja az ajánlatra).
+2. **A munka részletei, egy képernyőn.** Szíj vagy lánc, kettőstömegű,
+   start-stop... **„Nem tudom" válasz sehol nincs**, mert a szerelő látta az
+   autót - egy tipp az ő saját számlájára kerülne.
+3. **A tételek.** Minden sorra ott a szerviz saját normaideje és ára, és ha
+   ennél az autónál más kell, a szerelő **bármelyiket átírja**, vagy **saját
+   sort vesz fel** (beszorult csavar, vizsgadíj, gumi ára). Ez használat, nem
+   beállítás: egyetlen ajánlatra vonatkozik. Csak az átírt szám számít; a le
+   nem nyúlt sorok követik a számolást (pl. az apróanyag a megemelt
+   óraszámmal együtt nő).
+4. **Kész ajánlat.** Tételes, nettó + ÁFA = bruttó (alanyi adómentes buildnél
+   ÁFA nélkül). Nem „-tól", nem tájékoztató - ez a végleges szám. Alatta egy
+   **kimásolható, sima szöveges ajánlat** az ügyfélnek, másolás gombbal.
 
-**Az AI csak akkor kap szót**, ha az ügyfél olyat ír, amit a backend nem tud
-leképezni: saját kérdés, vagy saját szavakkal megfogalmazott válasz. Fix JSON
-alakban felel (`{"valasz": "...", "ertek": ...}`), és amit "ertek"-ként ad
-vissza, azt a backend ellenőrzi a kérdés saját opciólistáján.
+Utána: „Tételek módosítása" vagy „Új ajánlat másik autóra".
 
-**Az árat a kód számolja**, determinisztikusan, a `lib/flow.js`-ből. A modell
-soha nem számol, ezért nem tud árat kitalálni.
+**Az árat mindig a kód számolja, sosem az AI.** Az AI csak akkor kap szót, ha a
+szerelő olyat ír, amit a backend nem tud gombhoz rendelni.
 
-### Két kimenet, sosem összekeverve
+## Egy szerviznek építeni
 
-| Amit az ügyfél mond | Amit kap |
-|---|---|
-| **Konkrét munka** (fékbetét, olajcsere, vezérműszíj, kuplung…) | tételes becslés: alkatrész + munkadíj (óra × óradíj külön kiírva) + apróanyag |
-| **Tünet** (furcsa zaj, rángat, világít a lámpa, "nem tudom mi a baj") | **semmilyen javítási ár.** Csak a diagnosztika díja, és időpont. |
-
-Ha valaki egyszerre kér konkrét munkát ÉS leír egy tünetet, a konkrét munka
-árazva lesz, a tünet mellé pedig odakerül a diagnosztika - külön tételként.
-
-### Pontosabb kérdések, kevesebb képernyő
-
-A kettő látszólag egymás ellen dolgozik, ezért három szabály oldja fel:
-
-1. **Csak attól kérdezzük, akinek számít.** A „szíj vagy lánc” kérdés sosem jut
-   el egy olajcseréig; az elektromos kézifék kérdés sosem jut el egy 2006-os
-   autóhoz; a start-stop kérdés csak akkumulátorcserénél jön elő.
-2. **Amit ki lehet számolni, azt nem kérdezzük meg.** Az olaj mennyisége a motor
-   méretéből jön (egy 2.0 TDI 5 litert visz, egy 1.2-es négyet), a klímagáz
-   fajtája az évjáratból (2017 felett R1234yf, aminek az ára a régi gáz
-   többszöröse). Mindkettő tízezrekkel mozgatja az árat, és egy kattintásba sem
-   kerül.
-3. **Egy képernyő, több kérdés.** Az autó adatai (évjárat, alvázszám, km) egy
-   űrlapon vannak, a munka részletei egy másikon, az alkatrész-kategóriával
-   együtt. Így három plusz kérdés egy plusz képernyő, nem három plusz kör.
-
-4. **Nincs udvariassági kérdés.** Az első kérdés az, ami számít: *mit kellene
-   megcsinálni az autón*. A "miben segíthetek?" nyitány egy képernyőbe és egy
-   koppintásba került, és semmit nem mondott a rendszernek: mindhárom válasz
-   után ugyanaz a folyamat jött.
-
-Eredmény: egy olajcsere **8 képernyő** a köszönéstől az árig, egy kuplung
-kettőstömegűvel és összkerékhajtással **9** - miközben 11-14 adatot gyűjt be.
-A `test-flow.mjs` meg is méri, és elhasal, ha egy jövőbeli módosítás ezt elrontja.
-
-A leggyorsabb út viszont az, ha valaki egy mondatban ír be mindent: a
-„Passat 2.0 TDI, 2012-es, vezérműszíj kellene” egyszerre négy kérdést válaszol
-meg, és a bot visszamondja, mit olvasott ki belőle. Ehhez kell az AI-kulcs.
-
-### Ár: reális alapár, nem sáv és nem a legjobb eset
-
-A becslés `X Ft-tól` alakban jelenik meg, mellette **felsorolva, mi jöhet még
-hozzá** (kopott tárcsa, beszorult csavar, R1234yf gáz…). Ez tudatos: egy sáv az
-alsó széléhez horgonyozza az ügyfelet, és a szerviznek kell felfelé érvelnie a
-pultnál.
-
-**De az alapár nem a legjobb eset.** Egy korábbi verzió minden „nem tudom”-ot a
-legolcsóbb irányba oldott fel. Ez ugyanabba a hibába fut bele, csak a másik
-oldalról: öt ismeretlenből összerakott legolcsóbb ár olyan szám, ami a
-gyakorlatban soha nem jön ki, az ügyfél pedig a pultnál hall egy 40-60
-százalékkal magasabbat. Pont az a jelenet, amit az alapár meg akart előzni.
-
-Ezért egy ismeretlen válasz a **szokásos esetre** oldódik fel, és az ajánlat
-**kiírja, mit feltételezett**:
-
-| „Nem tudom” | Mivel számol | Miért |
-|---|---|---|
-| Alkatrész-kategória | márkás utángyártott (középső) | ezt szokta a szerviz alapból beépíteni |
-| Kettőstömegű lendkerék | 2005+ dízelnél: **van** | ott ez a szokásos, és 180 000 Ft-os tétel |
-| Start-stop akku | 2015+ autónál: **AGM** | akkor már jellemzően van benne |
-| Keréktárcsa mérete | 17-18 coll | ez a leggyakoribb |
-| Motor | benzines | rövidebb normaidő, de ki van írva |
-
-Egy Passat kuplungcserénél ez 180 000 Ft helyett 358 000 Ft-ot jelent, ha a
-lendkerékre azt mondják „nem tudom”. A magasabb szám a kellemetlenebb, de az az
-igaz - és a `test-flow.mjs` őrzi, hogy egy „nem tudom” soha ne a legolcsóbb
-árat adja vissza.
-
----
-
-## Amit egy szerelő azonnal keresni fog
-
-- **„Miből jött ki ez az ár?”** - minden ajánlat alatt egy lenyitható panel:
-  normaidő, óradíj, alkatrészár, kategória-szorzó. Ez az, ami miatt nem
-  fekete doboz. Az éles verzióban ez a panel nem jelenik meg az ügyfélnek.
-- **Motor szerinti normaidő** - a dízel vezérlés hosszabb munka, mint a benzines,
-  és a rendszer ezt tudja (`lib/cars.js` olvassa ki a motorfeliratból).
-- **Kategória-szorzó** - egy BMW 5-ös fékmunkája több, mint egy Swifté. A
-  szorzó modellre van kötve, nem márkára, ezért egy 1-es BMW középkategória.
-- **Alvázszám-visszaolvasás** - valódi alvázszámból kiolvassa az évjáratot és a
-  gyártót. Ha az alvázszám **más márkát** ad, mint amit az ügyfél mondott, azt
-  **jelzi**, nem írja felül: egy telefonon bepötyögött alvázszámban gyakrabban
-  van elütés, mint nincs.
-- **Szíj vagy lánc** - külön kérdés, külön alkatrész és másfélszeres munkaidő.
-  Ha valaki nem tudja, a szíjas, olcsóbb változattal számol, és a becslés megírja,
-  mi a helyzet lánccal.
-- **Elektromos kézifék, start-stop akku, összkerékhajtás, keréktárcsa-méret** -
-  mind külön kérdés, mind csak azoknak, akiknél számít.
-- **Egy szakmai megjegyzés beszélgetésenként**, és mindig igaz: vízpumpa a
-  vezérléssel, kettőstömegű lendkerék a kuplungnál, tárcsavastagság a fékbetétnél.
-
----
-
-## A prototípus-specifikus részek
-
-- A chat FÖLÖTT, nem apróbetűben: *„Minta árakkal fut, nem egy konkrét szerviz
-  katalógusából.”* Enélkül egyetlen rossz szám „ez baromság”-ként olvasódik,
-  nem „ez minta adat”-ként.
-- **Minta gomb** az alvázszámhoz és a rendszámhoz: a kanapén ülő szerelőnek
-  nincs kéznél egyik sem, és nem is akarja beírni a sajátját.
-- A név, telefon, e-mail viszont valódi mező: ha valaki kitölti, **megérkezik**.
-  Az űrlap fölött ott áll, hogy ez minta, és hogy hívni senki nem fog.
-- Az ajánlat után a képernyőn megjelenik a **tulajdonosi kártya** („ezt kapná
-  meg a szerviz”), mert az ár önmagában sosem magyarázza el a termék másik felét.
-- **„Mit tudna ez élesben?”** - az ár alatt, nyitva, tételesen: mit nem tud most
-  a minta (alvázszám-alapú alkatrészkeresés, a szerviz saját normaidői, a saját
-  óradíja és beszállítói kedvezménye), és mit tudna egy konkrét szervizzel. Ez a
-  blokk válaszol az egyetlen kérdésre, ami egy szerelőben felmerül a minta ár
-  láttán: *"és az én áraimmal hogyan menne?"*
-- **Visszajelzés-űrlap** minden beszélgetés végén, a legfontosabb mezővel:
-  *„Mennyiért csinálnád meg nálad ezt a munkát?”*
-
----
+`lib/flow.js`: a `SHOP` blokkba a szerviz neve, óradíjai és ÁFA-kulcsa
+(alanyi adómentesnél `vat: 0`), az `A`-ba az árlistája, az `N`-be a
+normaidők, amikkel dolgozik, a `JOBS`-ba a munkái. Ha van beszállítói
+hozzáférése (cikkszám szerinti ár), az alkatrészár onnan jöhet. A tételek
+szerkesztése minden buildben megmarad, mert a szerelő a saját autójánál többet
+tud, mint bármelyik táblázat.
 
 ## Az árak
 
-**A `lib/flow.js`-ben lévő minden szám a 2026-os magyar piac átlaga, nem egy
-létező szerviz árlistája.** Budapesti, márkafüggetlen szerviz szintjére van
-kalibrálva.
+`lib/flow.js`: `DEFAULT_RATES` (óradíjak), `N` (normaidők, középkategóriás
+autóra, a `lib/cars.js` kategória-szorzójával), `A` (alkatrészárak
+kategóriánként, 2026-os magyar webshop-listákhoz igazítva). Minden érték nettó.
+A `TEST_SCENARIOS` laza piaci sávokkal ellenőrzi, hogy egy átírt szám ne
+szaladjon el nagyságrendekkel.
 
-- **Munkadíj és összárak:** 2026-os JóSzaki autószerelés- és vezérléscsere-sávok,
-  publikált budapesti szervizárlisták, autóklíma- és diagnosztikadíjak.
-- **Alkatrészárak:** valódi magyar webshop-listaárak (bruttó), 1,27-tel visszaosztva
-  és a sáv olcsóbb végére kerekítve, mert ez alapár, nem átlag. Konkrétan:
-  vezérműszíj készlet vízpumpával márkásan 28 050 - 47 936 Ft (INA, GATES);
-  kuplung szett SACHS 75 945 Ft, kettőstömegűvel együtt LuK 267 238 Ft;
-  TRW első féktárcsa Opel Astra G 14 490 Ft/db; Bosch akkumulátor 26 211 - 59 719 Ft,
-  ahol az AGM a felső vége. A pontos hivatkozások a `lib/flow.js` `A` objektuma
-  fölötti kommentben vannak.
+## E-mail
 
-Minden érték **nettó**; a motor rakja rá a 27% ÁFÁ-t, és az ügyfél **bruttó**
-árat lát, mert a pultnál azt fizeti.
-
-| Forgatókönyv | A rendszer ára | Piaci sáv (bruttó) |
-|---|---|---|
-| Olajcsere, Swift 1.2, márkás alkatrész | ~23 000 Ft-tól | 15 000 - 60 000 |
-| Olajcsere minden szűrővel, Passat 2.0 TDI, márkás | ~44 000 Ft-tól | 30 000 - 110 000 |
-| Fékbetét első tengely, Astra 1.7 CDTI, utángyártott | ~29 000 Ft-tól | 18 000 - 45 000 |
-| Hátsó fék tárcsával, elektromos kézifékkel, Superb | ~112 000 Ft-tól | 60 000 - 250 000 |
-| Vezérmű**szíj** + vízpumpa, Passat 2.0 TDI, márkás | ~116 000 Ft-tól | ~130 000 |
-| Vezérmű**lánc**, Golf 1.4 TSI, márkás | ~152 000 Ft-tól | 45 000 - 450 000 |
-| Kuplung, Focus 1.6 TDCi, KTL nélkül, utángyártott | ~148 000 Ft-tól | 78 000 - 275 000 |
-| Klímatöltés régi gázzal, Octavia 1.6 TDI (2012) | ~25 000 Ft-tól | 20 000 - 30 000 |
-| Klímatöltés R1234yf gázzal, Corolla (2021) | ~53 000 Ft-tól | 40 000 - 110 000 |
-| Diagnosztika (tünet) | 13 000 Ft | 8 000 - 15 000 |
-
-A teszt azt is őrzi, hogy a drágább változat mindig drágább maradjon (lánc a
-szíjnál, AGM akku a hagyományosnál, összkerék az elsőkeréknél), és hogy a
-**„Nem tudom” mindig az olcsóbb változattal** számoljon - különben az alapár
-nem alapár.
-
-`node test-flow.mjs` végigkattintja ezeket és kiírja az árukat. Ha egy jövőbeli
-árszerkesztés kimozdul a piaci borítékból, a teszt nem nulla kóddal áll le.
-
-### Egy valódi szerviz áraira átállítani
-
-1. `lib/flow.js` → a `P` objektum (óradíjak, diagnosztika díj, apróanyag) és az
-   `A` objektum (alkatrészárak kategóriánként), plusz az `N` (normaidők).
-2. `JOBS` → amit a szerviz tényleg vállal. Ami nincs benne, arra a bot **nem ad
-   árat** és nem is veszi fel az igényt.
-3. `node test-flow.mjs`.
-
-Más nem kell hozzá. A `lib/cars.js` és az `api/faq-agent.js` szervizfüggetlen.
-
----
-
-## Elérhetőség: név és e-mail, telefon nélkül, naponta egyszer küldve
-
-Az árat SOHA nem előzi meg elérhetőség-kérés. Ha az ASK_CONTACT bekapcsolva
-van (alapból igen a prototípusban is), az ár UTÁN kér nevet és e-mail címet -
-telefonszámot soha, mert ez volt a legtöbb kilépés oka az első teszt-körben.
-
-Ugyanaz az IP naponta egyszer küldi ki a nevet/e-mailt levélben (RL_LEAD_PER_DAY,
-alapból 1). Ez a levélre vonatkozik, nem a kalkulátorra: bárki annyi autóra
-kérhet árat, amennyire akar (`Másik autóra is kérek árat`), csak a szerviz
-postafiókjába nem érkezik ugyanattól a tesztelőtől tíz másolat.
-
-## Amit ez NEM tud, és miért
-
-Egy chatből nem jön ki pontos árajánlat - se ebből, se másból. A végszámlát
-három dolog dönti el: a pontos alkatrészváltozat, hogy mi derül ki még, amikor
-a kerék lejön, és a szerviz saját órabére és beszerzési ára. A középső egyszerűen
-nem tudható, amíg az autó nincs emelőn.
-
-Ezért nem "árajánlat" a kimenet, hanem **alapár + nevesített kizárások**: az a
-szám, amit a szerviz telefonon is kimondana, és amit utána nem kell visszaszívnia.
-
-**Az alvázszámról külön.** A bot elkéri, és valódi alvázszámból kiolvassa a
-gyártót és - ahol ez megbízható - az évjáratot. Az alkatrészt NEM tudja belőle
-kikeresni, mert a 4-9. karakter jelentését minden gyártó maga definiálja, és nem
-publikálja. Katalógus kell hozzá. A szervizeknek viszont már van: a beszállítói
-rendszerük (Unix, Inter Cars, Trost) alvázszámból kiadja a pontos alkatrészt a
-saját árukkal. Az alvázszám itt tehát nem a kalkulátornak kell, hanem a
-szerviznek, hogy ne kelljen visszatelefonálnia az ügyfélnek.
-
-> Az évjárat kiolvasása csak azoknál a gyártóknál megy, akik követik az
-> észak-amerikai szabályt (VW-csoport, BMW, Mercedes, Ford, japánok, koreaiak).
-> A francia és olasz márkáknál a 10. karakter nem évjárat, ezért ott a bot
-> inkább nem mond évet. Egy magabiztosan kimondott rossz évszám többet árt,
-> mint egy "nem tudom".
+`EMAIL_QUOTES=on` esetén minden kiadott ajánlat másolata a `LEAD_EMAIL_TO`
+címre megy (alapból ki van kapcsolva). A szerelői visszajelzés és a „kérek egy
+sajátot" jelentkezés mindig megy; utóbbi IP-nként naponta egyszer
+(`RL_LEAD_PER_DAY`).
 
 ## Futtatás és telepítés
 
@@ -275,10 +102,10 @@ A URL-ből SOHA nem tud más címre küldeni.
 
 | fájl | mi ez |
 |---|---|
-| `lib/flow.js` | **a szerviz**: kérdések, gombok, normaidők, alkatrészárak, kizárások |
+| `lib/flow.js` | kérdések, gombok, alapértelmezett normaidők és alkatrészárak, felülírások |
 | `lib/cars.js` | autókatalógus (márka → típus → motor), kategória-szorzó, alvázszám-dekóder |
-| `api/faq-agent.js` | a motor: beszélgetés, ÁFA, ajánlat, tulajdonosi kártya, e-mail |
-| `public/index.html` | a landoló oldal a minta-figyelmeztetéssel |
+| `api/faq-agent.js` | a motor: beszélgetés, tételek-szerkesztő, ÁFA, ügyfél-ajánlat, e-mail |
+| `public/index.html` | a landoló oldal |
 | `public/widget.js` | a chat, ami magától kinyílik |
 | `test-flow.mjs` | véletlen végigjárás + rögzített forgatókönyvek + őrök |
 

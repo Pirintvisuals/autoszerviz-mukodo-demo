@@ -392,7 +392,7 @@
 }
 
 /* ---------- Quick-reply chips ---------- */
-.faq-chips {
+.faq-chips, .faq-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
@@ -601,7 +601,7 @@ select.faq-form-input { appearance: auto; }
   .faq-header-phone { padding: 8px; }
   .faq-chat-messages { padding: 14px 10px 6px; }
   .faq-bubble { max-width: 88%; font-size: 15px; }
-  .faq-chips, .faq-form { margin-left: 0; }
+  .faq-chips, .faq-actions, .faq-form { margin-left: 0; }
   .faq-form { max-width: none; }
   /* 16px inputs stop iOS zooming in when a field is focused. */
   .faq-form-input { font-size: 16px; }
@@ -834,41 +834,111 @@ textarea.faq-form-input { min-height: 72px; resize: vertical; }
   .faq-form-submit { padding: 15px 18px; font-size: 16px; }
 }
 
-/* --- One-tap verdict, directly under the price ---------------------------
-   25 quotes on day one produced zero feedback, because the form sat at the
-   bottom behind two panels. This asks for one tap where the eye already is. */
-.faq-quick {
-  margin: 4px 8px 12px;
-  padding: 14px 15px;
-  border: 2px solid var(--bc-accent);
-  border-radius: 14px;
-  background: #FFFDF7;
+
+/* --- The tételek screen: numbers with their unit beside them --------------
+   Hours and forints look identical as bare digits, and on this screen the
+   mechanic is typing both in the same column. The unit sits inside the field
+   so what he typed reads back as the thing he meant. */
+.faq-form-unitwrap { position: relative; display: block; }
+.faq-form-unitwrap .faq-form-input { padding-right: 52px; }
+.faq-form-unit {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--bc-muted);
+  pointer-events: none;
 }
-.faq-quick-title {
-  font-weight: 700;
-  font-size: 15px;
+/* What the engine proposed, kept under what he typed over it. */
+.faq-form-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
   line-height: 1.4;
-  color: var(--bc-ink);
-  margin-bottom: 10px;
+  color: var(--bc-muted);
 }
-.faq-quick-row { display: flex; flex-wrap: wrap; gap: 8px; }
-.faq-quick-chip {
-  flex: 1 1 auto;
-  padding: 11px 14px;
-  border: 1px solid var(--bc-accent-strong);
-  border-radius: 999px;
-  background: #fff;
+.faq-form-add {
+  display: block;
+  width: 100%;
+  margin: 4px 0 10px;
+  padding: 10px 14px;
+  border: 1px dashed var(--bc-accent-strong);
+  border-radius: 10px;
+  background: transparent;
   color: var(--bc-accent-ink);
   font: inherit;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 650;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.faq-quick-chip:hover { background: var(--bc-accent); color: var(--bc-on-accent); }
-.faq-quick-note {
-  margin-top: 9px;
+.faq-form-add:hover { background: var(--bc-accent-soft, rgba(0,0,0,.03)); }
+
+/* --- The document the customer actually receives --------------------------
+   Shown in full rather than folded: it is the output of the whole exercise,
+   and the copy button is the last action the mechanic takes. */
+.faq-customer {
+  margin: 0 12px 12px;
+  padding: 14px 16px;
+  border: 2px solid var(--bc-accent-strong);
+  border-radius: 14px;
+  background: #fff;
+}
+.faq-customer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.faq-customer-title {
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--bc-ink);
+}
+.faq-customer-copy {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--bc-accent-strong);
+  border-radius: 999px;
+  background: var(--bc-accent);
+  color: var(--bc-on-accent);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.faq-customer-copy.is-done { background: #16803C; border-color: #16803C; color: #fff; }
+.faq-customer-note {
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--bc-muted);
+  margin-bottom: 10px;
+}
+.faq-customer-text {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--bc-line, #E3E0D8);
+  border-radius: 10px;
+  background: #FAFAF7;
+  color: var(--bc-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  resize: vertical;
+}
+.faq-customer-text:focus { outline: none; border-color: var(--bc-accent-strong); }
+
+@media (max-width: 600px) {
+  .faq-customer { margin: 0 8px 10px; padding: 13px 14px; }
+  .faq-customer-head { flex-wrap: wrap; }
+  /* 16px stops iOS zooming the whole page when the field takes focus. */
+  .faq-customer-text { font-size: 12px; }
+  .faq-form-unitwrap .faq-form-input { font-size: 16px; }
 }
