@@ -4,6 +4,17 @@
 autót, tudja mi a munka, és most az ajánlat összerakása van hátra: normaidő,
 alkatrész, apróanyag, ÁFA, és egy papír, amit az ügyfél megkap.
 
+## Önlejátszó minta (`onlejatszo-bemutato` ág)
+
+A főoldal (`public/index.html` + `demo.js` + `demo.css`) egy **magától
+lejátszódó minta**, ugyanazzal a képernyővel, mint az élő műhelyeszköz
+(autoszerviz-olajcsere): bal oldalt a számozott kártyák (autó → munka →
+kérdések → alkatrészek → mellé járó tételek), jobb oldalt az épülő ajánlat, a
+végén a nyomtatható árajánlat. Semmi nem kattintható, és nem hív szervert. Az
+autót begépeli (alvázszámos keresést nem ígér), a tételek a minta szerviz árai.
+`?gyors` a címben háromszoros sebesség. A chat (`widget.js`) és az `api/`
+változatlan, csak a főoldal nem tölti be.
+
 ## Miért fordult meg
 
 Az első változat az autós ügyfélnek adott hozzávetőleges, „X Ft-tól" árat a
