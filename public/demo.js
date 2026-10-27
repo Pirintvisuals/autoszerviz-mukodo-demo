@@ -93,6 +93,21 @@
     { label: 'Fékpatkó-kenőpaszta', m: '1 db · 1 200 Ft/db · csak ha kéri', on: false },
   ];
 
+  // Per-shop link (?m=...), same convention as the live tool: only the shop's
+  // public name and contacts change, the prices stay the sample shop's.
+  // Only that shop gets its link.
+  const SHOPS = {
+    agtrcar: { name: 'AGTR CAR Kft.', logo: 'AG', lines: ['+36 20 523 5266 · +36 79 522 740', 'agtrcar@gmail.com'] },
+  };
+  const SHOP = SHOPS[(new URLSearchParams(location.search).get('m') || '').toLowerCase()];
+  if (SHOP) {
+    document.title = `${SHOP.name} - árajánlat-készítő minta`;
+    $('top-shop').textContent = SHOP.name;
+    $('s-logo').textContent = SHOP.logo;
+    $('s-shop').innerHTML = `<b>${esc(SHOP.name)}</b>` + SHOP.lines.map((l) => `<div>${esc(l)}</div>`).join('');
+    $('s-sign-shop').textContent = SHOP.name;
+  }
+
   const CUSTOMER = { name: 'Nagy Péter', plate: 'PRT-482' };
   const TOTAL_STEPS = 15;
 
