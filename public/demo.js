@@ -98,14 +98,20 @@
   // Only that shop gets its link.
   const SHOPS = {
     agtrcar: { name: 'AGTR CAR Kft.', logo: 'AG', lines: ['+36 20 523 5266 · +36 79 522 740', 'agtrcar@gmail.com'] },
+    mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
+      lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };
   const SHOP = SHOPS[(new URLSearchParams(location.search).get('m') || '').toLowerCase()];
   if (SHOP) {
     document.title = `${SHOP.name} - árajánlat-készítő minta`;
     $('top-shop').textContent = SHOP.name;
     $('s-logo').textContent = SHOP.logo;
+    if (SHOP.img) {
+      $('s-logo').innerHTML = `<img src="${esc(SHOP.img)}" alt="">`;
+      document.querySelector('.brand .dot').outerHTML = `<img class="logo" src="${esc(SHOP.img)}" alt="">`;
+    }
     $('s-shop').innerHTML = `<b>${esc(SHOP.name)}</b>` + SHOP.lines.map((l) => `<div>${esc(l)}</div>`).join('');
-    $('s-sign-shop').textContent = SHOP.name;
+    $('s-sign-shop').textContent = SHOP.sign || SHOP.name;
   }
 
   const CUSTOMER = { name: 'Nagy Péter', plate: 'PRT-482' };
