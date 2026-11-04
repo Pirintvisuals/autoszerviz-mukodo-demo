@@ -22,8 +22,44 @@
   const huf = (n) => Math.round(n).toLocaleString('hu-HU').replace(/ /g, ' ') + ' Ft';
   const qty = (n) => String(n).replace('.', ',');
 
+  // Per-shop link (?m=...), same convention as the live tool: only the shop's
+  // public name and contacts change, the prices stay the sample shop's.
+  // Only that shop gets its link.
+  const SHOPS = {
+    agtrcar: { name: 'AGTR CAR Kft.', logo: 'AG', lines: ['+36 20 523 5266 · +36 79 522 740', 'agtrcar@gmail.com'] },
+    // László is Ford-only, so his version plays on a Ford. No Ford logo: the
+    // sheet would read as Ford's own estimate.
+    kanti: { name: 'Kanti László', logo: 'KL', lines: ['06 30 222 4766'],
+      car: {
+        query: 'focus 1.0 ecoboost',
+        results: [
+          { t: 'Ford Focus III 1.0 EcoBoost', code: 'M1DA', m: '2012–2018 · benzin · 74 kW' },
+          { t: 'Ford Focus III 1.0 EcoBoost', code: 'M2DA', m: '2012–2018 · benzin · 92 kW' },
+          { t: 'Ford Fiesta VII 1.0 EcoBoost', code: 'SFJA', m: '2012–2017 · benzin · 74 kW' },
+        ],
+        pick: 1,
+        name: 'Ford Focus III 1.0 EcoBoost',
+        facts: 'Benzin · 92 kW · 2012–2018 · Motorkód: <b class="mono">M2DA</b>',
+      },
+      discs: ['278 mm', '300 mm', '23 mm'] },
+    mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
+      lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
+  };
+  const SHOP = SHOPS[(new URLSearchParams(location.search).get('m') || '').toLowerCase()];
+  if (SHOP) {
+    document.title = `${SHOP.name} - árajánlat-készítő minta`;
+    $('top-shop').textContent = SHOP.name;
+    $('s-logo').textContent = SHOP.logo;
+    if (SHOP.img) {
+      $('s-logo').innerHTML = `<img src="${esc(SHOP.img)}" alt="">`;
+      document.querySelector('.brand .dot').outerHTML = `<img class="logo" src="${esc(SHOP.img)}" alt="">`;
+    }
+    $('s-shop').innerHTML = `<b>${esc(SHOP.name)}</b>` + SHOP.lines.map((l) => `<div>${esc(l)}</div>`).join('');
+    $('s-sign-shop').textContent = SHOP.sign || SHOP.name;
+  }
+
   // ---------------------------------------------------------------- the story
-  const CAR = {
+  const CAR = SHOP?.car || {
     query: 'octavia 1.6 tdi',
     results: [
       { t: 'Skoda Octavia III (5E) 1.6 TDI', code: 'CLHA', m: '2013–2020 · dízel · 77 kW' },
@@ -55,33 +91,35 @@
       options: [{ label: 'Igen', plus: 'Fékfolyadék, +0,5 óra' }, { label: 'Nem' }], pick: 0 },
   ];
 
+  const [DISC, DISC_ALT, THICK] = SHOP?.discs || ['288 mm', '312 mm', '25 mm'];
+
   const DISC_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#c9cdd2" stroke="#8a9096" stroke-width="1.5"/><circle cx="20" cy="20" r="9" fill="#e9ebed" stroke="#8a9096" stroke-width="1.5"/><circle cx="20" cy="20" r="2.6" fill="#8a9096"/><g fill="#8a9096"><circle cx="20" cy="14.5" r="1.2"/><circle cx="25.2" cy="18.3" r="1.2"/><circle cx="23.2" cy="24.4" r="1.2"/><circle cx="16.8" cy="24.4" r="1.2"/><circle cx="14.8" cy="18.3" r="1.2"/></g></svg>';
   const PAD_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M5 14 Q20 4 35 14 L33 28 Q20 22 7 28 Z" fill="#8a9096"/><path d="M8 16 Q20 8 32 16 L31 25 Q20 20 9 25 Z" fill="#4b5057"/></svg>';
 
   const PARTS = [
     {
       id: 'disc', label: 'Féktárcsa', qtyLabel: '2 db', svg: DISC_SVG,
-      ask: { text: 'Tárcsaátmérő?', options: [{ v: '288 mm', n: 6 }, { v: '312 mm', n: 5 }], pick: 0 },
-      answered: 'Átmérő: <b>288 mm</b>',
+      ask: { text: 'Tárcsaátmérő?', options: [{ v: DISC, n: 6 }, { v: DISC_ALT, n: 5 }], pick: 0 },
+      answered: `Átmérő: <b>${DISC}</b>`,
       why: 'a műhely márkája, ezt szereli be legtöbbször',
       fits: 6,
       list: [
-        { brand: 'ATE', name: 'Féktárcsa, első', specs: ['288 mm', '25 mm', 'hűtött', '5 lyuk'], price: 14500, shop: true, rec: true },
-        { brand: 'TRW', name: 'Féktárcsa, első', specs: ['288 mm', '25 mm', 'hűtött', '5 lyuk'], price: 12900 },
-        { brand: 'Brembo', name: 'Féktárcsa, első', specs: ['288 mm', '25 mm', 'hűtött', '5 lyuk'], price: 16800 },
+        { brand: 'ATE', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: 14500, shop: true, rec: true },
+        { brand: 'TRW', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: 12900 },
+        { brand: 'Brembo', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: 16800 },
       ],
-      line: { key: 'disc', label: 'Féktárcsa, első (ATE)', sub: '288 mm · hűtött', qty: 2, unit: 'db', price: 14500 },
+      line: { key: 'disc', label: 'Féktárcsa, első (ATE)', sub: `${DISC} · hűtött`, qty: 2, unit: 'db', price: 14500 },
     },
     {
       id: 'pad', label: 'Fékbetét', qtyLabel: '1 készlet', svg: PAD_SVG,
-      why: 'a műhely márkája, a 288 mm-es tárcsához illik',
+      why: `a műhely márkája, a ${DISC}-es tárcsához illik`,
       fits: 9,
       list: [
-        { brand: 'ATE', name: 'Fékbetétkészlet, első', specs: ['288 mm-es tárcsához', 'kopásjelző nélkül'], price: 15000, shop: true, rec: true },
-        { brand: 'TRW', name: 'Fékbetétkészlet, első', specs: ['288 mm-es tárcsához', 'kopásjelző nélkül'], price: 12400 },
-        { brand: 'Textar', name: 'Fékbetétkészlet, első', specs: ['288 mm-es tárcsához', 'kopásjelző nélkül'], price: 16900 },
+        { brand: 'ATE', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: 15000, shop: true, rec: true },
+        { brand: 'TRW', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: 12400 },
+        { brand: 'Textar', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: 16900 },
       ],
-      line: { key: 'pad', label: 'Fékbetétkészlet, első (ATE)', sub: 'a 288 mm-es tárcsához', qty: 1, unit: 'klt', price: 15000 },
+      line: { key: 'pad', label: 'Fékbetétkészlet, első (ATE)', sub: `a ${DISC}-es tárcsához`, qty: 1, unit: 'klt', price: 15000 },
     },
   ];
 
@@ -92,27 +130,6 @@
       line: { key: 'cleaner', label: 'Féktisztító spray', qty: 1, unit: 'db', price: 1800 } },
     { label: 'Fékpatkó-kenőpaszta', m: '1 db · 1 200 Ft/db · csak ha kéri', on: false },
   ];
-
-  // Per-shop link (?m=...), same convention as the live tool: only the shop's
-  // public name and contacts change, the prices stay the sample shop's.
-  // Only that shop gets its link.
-  const SHOPS = {
-    agtrcar: { name: 'AGTR CAR Kft.', logo: 'AG', lines: ['+36 20 523 5266 · +36 79 522 740', 'agtrcar@gmail.com'] },
-    mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
-      lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
-  };
-  const SHOP = SHOPS[(new URLSearchParams(location.search).get('m') || '').toLowerCase()];
-  if (SHOP) {
-    document.title = `${SHOP.name} - árajánlat-készítő minta`;
-    $('top-shop').textContent = SHOP.name;
-    $('s-logo').textContent = SHOP.logo;
-    if (SHOP.img) {
-      $('s-logo').innerHTML = `<img src="${esc(SHOP.img)}" alt="">`;
-      document.querySelector('.brand .dot').outerHTML = `<img class="logo" src="${esc(SHOP.img)}" alt="">`;
-    }
-    $('s-shop').innerHTML = `<b>${esc(SHOP.name)}</b>` + SHOP.lines.map((l) => `<div>${esc(l)}</div>`).join('');
-    $('s-sign-shop').textContent = SHOP.sign || SHOP.name;
-  }
 
   const CUSTOMER = { name: 'Nagy Péter', plate: 'PRT-482' };
   const TOTAL_STEPS = 15;
