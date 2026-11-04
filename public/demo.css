@@ -220,6 +220,11 @@ a.btn, button.btn { cursor: pointer; }
   .sheet { padding: 20px 16px; font-size: 13px; }
   .s-meta { text-align: left; }
   .s-info { grid-template-columns: 1fr; gap: 8px; }
+  /* Phones: the unit price column squeezes the item names to one word per
+     line; quantity and line total are enough to read the sheet. */
+  .sheet-wrap { padding: 16px 8px 32px; }
+  .sheet { padding: 18px 12px; }
+  .s-table th:nth-child(3), .s-table td:nth-child(3) { display: none; }
   .s-tot { width: 100%; }
 }
 
