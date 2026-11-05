@@ -42,6 +42,22 @@
         facts: 'Benzin · 92 kW · 2012–2018 · Motorkód: <b class="mono">M2DA</b>',
       },
       discs: ['278 mm', '300 mm', '23 mm'] },
+    // Jaguar-only shop: plays on an XF, with parts priced for a Jaguar. No
+    // Jaguar logo, same reason as the Ford one. The default customer is
+    // called Nagy Péter, which is their own name, so it is swapped.
+    njaguar: { name: 'N-Jaguar Szerviz Kft.', logo: 'NJ', lines: ['Budapest, Hőros u. 7.', '+36 30 940 6709 · szerviz@njaguar.hu'],
+      car: {
+        query: 'xf 2.2 d',
+        results: [
+          { t: 'Jaguar XF (X250) 2.2 D', code: '224DT', m: '2011–2015 · dízel · 120 kW' },
+          { t: 'Jaguar XF (X250) 2.2 D', code: '224DT', m: '2011–2015 · dízel · 140 kW' },
+          { t: 'Jaguar XF (X250) 3.0 D V6', code: '306DT', m: '2009–2015 · dízel · 177 kW' },
+        ],
+        pick: 1,
+        name: 'Jaguar XF (X250) 2.2 D',
+        facts: 'Dízel · 140 kW · 2011–2015 · Motorkód: <b class="mono">224DT</b>',
+      },
+      discs: ['326 mm', '355 mm', '30 mm'], partScale: 1.8, customer: { name: 'Szabó Gergely', plate: 'RKT-517' } },
     mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
       lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };
@@ -91,6 +107,7 @@
       options: [{ label: 'Igen', plus: 'Fékfolyadék, +0,5 óra' }, { label: 'Nem' }], pick: 0 },
   ];
 
+  const PART = (n) => Math.round((n * (SHOP?.partScale || 1)) / 100) * 100;
   const [DISC, DISC_ALT, THICK] = SHOP?.discs || ['288 mm', '312 mm', '25 mm'];
 
   const DISC_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#c9cdd2" stroke="#8a9096" stroke-width="1.5"/><circle cx="20" cy="20" r="9" fill="#e9ebed" stroke="#8a9096" stroke-width="1.5"/><circle cx="20" cy="20" r="2.6" fill="#8a9096"/><g fill="#8a9096"><circle cx="20" cy="14.5" r="1.2"/><circle cx="25.2" cy="18.3" r="1.2"/><circle cx="23.2" cy="24.4" r="1.2"/><circle cx="16.8" cy="24.4" r="1.2"/><circle cx="14.8" cy="18.3" r="1.2"/></g></svg>';
@@ -104,22 +121,22 @@
       why: 'a műhely márkája, ezt szereli be legtöbbször',
       fits: 6,
       list: [
-        { brand: 'ATE', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: 14500, shop: true, rec: true },
-        { brand: 'TRW', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: 12900 },
-        { brand: 'Brembo', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: 16800 },
+        { brand: 'ATE', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: PART(14500), shop: true, rec: true },
+        { brand: 'TRW', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: PART(12900) },
+        { brand: 'Brembo', name: 'Féktárcsa, első', specs: [DISC, THICK, 'hűtött', '5 lyuk'], price: PART(16800) },
       ],
-      line: { key: 'disc', label: 'Féktárcsa, első (ATE)', sub: `${DISC} · hűtött`, qty: 2, unit: 'db', price: 14500 },
+      line: { key: 'disc', label: 'Féktárcsa, első (ATE)', sub: `${DISC} · hűtött`, qty: 2, unit: 'db', price: PART(14500) },
     },
     {
       id: 'pad', label: 'Fékbetét', qtyLabel: '1 készlet', svg: PAD_SVG,
       why: `a műhely márkája, a ${DISC}-es tárcsához illik`,
       fits: 9,
       list: [
-        { brand: 'ATE', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: 15000, shop: true, rec: true },
-        { brand: 'TRW', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: 12400 },
-        { brand: 'Textar', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: 16900 },
+        { brand: 'ATE', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: PART(15000), shop: true, rec: true },
+        { brand: 'TRW', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: PART(12400) },
+        { brand: 'Textar', name: 'Fékbetétkészlet, első', specs: [`${DISC}-es tárcsához`, 'kopásjelző nélkül'], price: PART(16900) },
       ],
-      line: { key: 'pad', label: 'Fékbetétkészlet, első (ATE)', sub: `a ${DISC}-es tárcsához`, qty: 1, unit: 'klt', price: 15000 },
+      line: { key: 'pad', label: 'Fékbetétkészlet, első (ATE)', sub: `a ${DISC}-es tárcsához`, qty: 1, unit: 'klt', price: PART(15000) },
     },
   ];
 
@@ -131,7 +148,7 @@
     { label: 'Fékpatkó-kenőpaszta', m: '1 db · 1 200 Ft/db · csak ha kéri', on: false },
   ];
 
-  const CUSTOMER = { name: 'Nagy Péter', plate: 'PRT-482' };
+  const CUSTOMER = SHOP?.customer || { name: 'Nagy Péter', plate: 'PRT-482' };
   const TOTAL_STEPS = 15;
 
   // ------------------------------------------------------------- the machinery
