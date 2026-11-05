@@ -42,10 +42,10 @@
         facts: 'Benzin · 92 kW · 2012–2018 · Motorkód: <b class="mono">M2DA</b>',
       },
       discs: ['278 mm', '300 mm', '23 mm'] },
-    // Jaguar-only shop: plays on an XF, with parts priced for a Jaguar. No
-    // Jaguar logo, same reason as the Ford one. The default customer is
+    // Jaguar-only shop: plays on an XF, with parts priced for a Jaguar. Logo
+    // is Jaguar's (Milán's call, 2026-11-05). The default customer is
     // called Nagy Péter, which is their own name, so it is swapped.
-    njaguar: { name: 'N-Jaguar Szerviz Kft.', logo: 'NJ', lines: ['Budapest, Hőros u. 7.', '+36 30 940 6709 · szerviz@njaguar.hu'],
+    njaguar: { name: 'N-Jaguar Szerviz Kft.', logo: 'NJ', img: '/jaguar-logo.png', wide: true, lines: ['Budapest, Hőros u. 7.', '+36 30 940 6709 · szerviz@njaguar.hu'],
       car: {
         query: 'xf 2.2 d',
         results: [
@@ -68,6 +68,7 @@
     $('s-logo').textContent = SHOP.logo;
     if (SHOP.img) {
       $('s-logo').innerHTML = `<img src="${esc(SHOP.img)}" alt="">`;
+      if (SHOP.wide) document.body.classList.add('wide-logo');
       document.querySelector('.brand .dot').outerHTML = `<img class="logo" src="${esc(SHOP.img)}" alt="">`;
     }
     $('s-shop').innerHTML = `<b>${esc(SHOP.name)}</b>` + SHOP.lines.map((l) => `<div>${esc(l)}</div>`).join('');

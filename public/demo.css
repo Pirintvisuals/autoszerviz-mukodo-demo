@@ -200,6 +200,11 @@ a.btn, button.btn { cursor: pointer; }
 .s-logo img, .brand .logo { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .s-logo:has(img) { width: 64px; height: 64px; }
 .brand .logo { width: 32px; height: 32px; }
+/* Wide wordmark logos (black on white): a white rectangle, not a circle. */
+.wide-logo .s-logo, .wide-logo .brand .logo { border-radius: 4px; background: #fff; }
+.wide-logo .s-logo { width: 112px; height: 64px; }
+.wide-logo .s-logo img, .wide-logo .brand .logo { object-fit: contain; border-radius: 4px; }
+.wide-logo .brand .logo { width: 58px; height: 32px; padding: 2px 4px; }
 .s-shop b { font-size: 17px; } .s-shop div { color: #555; font-size: 12.5px; }
 .s-meta { text-align: right; } .s-meta h1 { margin: 0; font-size: 24px; } .s-meta div { font-size: 12.5px; color: #555; }
 .s-info { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
