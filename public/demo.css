@@ -202,9 +202,12 @@ a.btn, button.btn { cursor: pointer; }
 .brand .logo { width: 44px; height: 44px; }
 /* Wide wordmark logos (black on white): a white rectangle, not a circle. */
 .wide-logo .s-logo, .wide-logo .brand .logo { border-radius: 4px; background: #fff; }
-.wide-logo .s-logo { width: 112px; height: 64px; }
+/* Fixed height, width from the logo's own proportions, so a very wide
+   wordmark is not shrunk into a small box. */
+.wide-logo .s-logo { width: auto; height: 64px; padding: 4px 6px; }
+.wide-logo .s-logo img { width: auto; height: 100%; max-width: 170px; }
 .wide-logo .s-logo img, .wide-logo .brand .logo { object-fit: contain; border-radius: 4px; }
-.wide-logo .brand .logo { width: 96px; height: 52px; padding: 3px 6px; }
+.wide-logo .brand .logo { width: auto; height: 52px; max-width: 160px; padding: 3px 6px; }
 /* White-on-transparent logos: a dark rectangle instead of the white one. */
 .dark-logo .s-logo, .dark-logo .brand .logo { background: #16191D; }
 .s-shop b { font-size: 17px; } .s-shop div { color: #555; font-size: 12.5px; }

@@ -74,12 +74,27 @@
         facts: 'Dízel · 140 kW · 2015–2019 · Motorkód: <b class="mono">B47D20A</b>',
       },
       discs: ['300 mm', '330 mm', '24 mm'], partScale: 1.5 },
+    // Volvo / Polestar / Lynk & Co specialist, only 2012+ models.
+    vszerviz: { name: 'VSzerviz', logo: 'VS', img: '/vszerviz-logo.png', wide: true, title: 'Árajánlat-készítő Volvo-szervizeknek',
+      lines: ['Százhalombatta, Berzsenyi D. u. 13.', '+36 30 222 4616 · info@vszerviz.hu'],
+      car: {
+        query: 'v60 d4',
+        results: [
+          { t: 'Volvo V60 (155) D4', code: 'D5204T5', m: '2013–2015 · dízel · 120 kW' },
+          { t: 'Volvo V60 (155) D4', code: 'D4204T5', m: '2015–2018 · dízel · 133 kW' },
+          { t: 'Volvo XC60 (156) D4', code: 'D4204T5', m: '2015–2017 · dízel · 140 kW' },
+        ],
+        pick: 1,
+        name: 'Volvo V60 (155) D4',
+        facts: 'Dízel · 133 kW · 2015–2018 · Motorkód: <b class="mono">D4204T5</b>',
+      },
+      discs: ['300 mm', '316 mm', '28 mm'], partScale: 1.5 },
     mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
       lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };
   const SHOP = SHOPS[(new URLSearchParams(location.search).get('m') || '').toLowerCase()];
   if (SHOP) {
-    document.title = `${SHOP.name} - árajánlat-készítő minta`;
+    document.title = SHOP.title ? `${SHOP.title} - ${SHOP.name}` : `${SHOP.name} - árajánlat-készítő minta`;
     $('top-shop').textContent = SHOP.name;
     $('s-logo').textContent = SHOP.logo;
     if (SHOP.img) {
