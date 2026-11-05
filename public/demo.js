@@ -58,6 +58,22 @@
         facts: 'Dízel · 140 kW · 2011–2015 · Motorkód: <b class="mono">224DT</b>',
       },
       discs: ['326 mm', '355 mm', '30 mm'], partScale: 1.8, customer: { name: 'Szabó Gergely', plate: 'RKT-517' } },
+    // BMW specialist. Logo is white on transparent, so it sits on a dark
+    // rectangle (dark: true), also on the white estimate.
+    bombis: { name: 'Bömbis István', logo: 'BI', img: '/bombis-logo.png', wide: true, dark: true,
+      lines: ['Nyíregyháza, Liliom u. 53/B', '+36 30 277 4338 · bombis.istvan@gmail.com'],
+      car: {
+        query: '320d f30',
+        results: [
+          { t: 'BMW 3 (F30) 320 d', code: 'N47D20C', m: '2011–2015 · dízel · 135 kW' },
+          { t: 'BMW 3 (F30) 320 d', code: 'B47D20A', m: '2015–2019 · dízel · 140 kW' },
+          { t: 'BMW 3 Touring (F31) 320 d', code: 'B47D20A', m: '2015–2019 · dízel · 140 kW' },
+        ],
+        pick: 1,
+        name: 'BMW 3 (F30) 320 d',
+        facts: 'Dízel · 140 kW · 2015–2019 · Motorkód: <b class="mono">B47D20A</b>',
+      },
+      discs: ['300 mm', '330 mm', '24 mm'], partScale: 1.5 },
     mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
       lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };
@@ -69,6 +85,7 @@
     if (SHOP.img) {
       $('s-logo').innerHTML = `<img src="${esc(SHOP.img)}" alt="">`;
       if (SHOP.wide) document.body.classList.add('wide-logo');
+      if (SHOP.dark) document.body.classList.add('dark-logo');
       document.querySelector('.brand .dot').outerHTML = `<img class="logo" src="${esc(SHOP.img)}" alt="">`;
     }
     $('s-shop').innerHTML = `<b>${esc(SHOP.name)}</b>` + SHOP.lines.map((l) => `<div>${esc(l)}</div>`).join('');

@@ -205,6 +205,8 @@ a.btn, button.btn { cursor: pointer; }
 .wide-logo .s-logo { width: 112px; height: 64px; }
 .wide-logo .s-logo img, .wide-logo .brand .logo { object-fit: contain; border-radius: 4px; }
 .wide-logo .brand .logo { width: 96px; height: 52px; padding: 3px 6px; }
+/* White-on-transparent logos: a dark rectangle instead of the white one. */
+.dark-logo .s-logo, .dark-logo .brand .logo { background: #16191D; }
 .s-shop b { font-size: 17px; } .s-shop div { color: #555; font-size: 12.5px; }
 .s-meta { text-align: right; } .s-meta h1 { margin: 0; font-size: 24px; } .s-meta div { font-size: 12.5px; color: #555; }
 .s-info { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
