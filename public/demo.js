@@ -22,6 +22,19 @@
   const huf = (n) => Math.round(n).toLocaleString('hu-HU').replace(/ /g, ' ') + ' Ft';
   const qty = (n) => String(n).replace('.', ',');
 
+  // Shared by the BMW shops.
+  const BMW_320D = {
+    query: '320d f30',
+    results: [
+      { t: 'BMW 3 (F30) 320 d', code: 'N47D20C', m: '2011–2015 · dízel · 135 kW' },
+      { t: 'BMW 3 (F30) 320 d', code: 'B47D20A', m: '2015–2019 · dízel · 140 kW' },
+      { t: 'BMW 3 Touring (F31) 320 d', code: 'B47D20A', m: '2015–2019 · dízel · 140 kW' },
+    ],
+    pick: 1,
+    name: 'BMW 3 (F30) 320 d',
+    facts: 'Dízel · 140 kW · 2015–2019 · Motorkód: <b class="mono">B47D20A</b>',
+  };
+
   // Per-shop link (?m=...), same convention as the live tool: only the shop's
   // public name and contacts change, the prices stay the sample shop's.
   // Only that shop gets its link.
@@ -62,17 +75,7 @@
     // rectangle (dark: true), also on the white estimate.
     bombis: { name: 'Bömbis István', logo: 'BI', img: '/bombis-logo.png', wide: true, dark: true,
       lines: ['Nyíregyháza, Liliom u. 53/B', '+36 30 277 4338 · bombis.istvan@gmail.com'],
-      car: {
-        query: '320d f30',
-        results: [
-          { t: 'BMW 3 (F30) 320 d', code: 'N47D20C', m: '2011–2015 · dízel · 135 kW' },
-          { t: 'BMW 3 (F30) 320 d', code: 'B47D20A', m: '2015–2019 · dízel · 140 kW' },
-          { t: 'BMW 3 Touring (F31) 320 d', code: 'B47D20A', m: '2015–2019 · dízel · 140 kW' },
-        ],
-        pick: 1,
-        name: 'BMW 3 (F30) 320 d',
-        facts: 'Dízel · 140 kW · 2015–2019 · Motorkód: <b class="mono">B47D20A</b>',
-      },
+      car: BMW_320D,
       discs: ['300 mm', '330 mm', '24 mm'], partScale: 1.5 },
     // Volvo / Polestar / Lynk & Co specialist, only 2012+ models.
     vszerviz: { name: 'VSzerviz', logo: 'VS', img: '/vszerviz-logo.png', wide: true, title: 'Árajánlat-készítő Volvo-szervizeknek',
@@ -89,6 +92,10 @@
         facts: 'Dízel · 133 kW · 2015–2018 · Motorkód: <b class="mono">D4204T5</b>',
       },
       discs: ['300 mm', '316 mm', '28 mm'], partScale: 1.5 },
+    // BMW specialist (also all makes), no logo found.
+    demjen: { name: 'Demjén Autószerviz', logo: 'DA', title: 'Árajánlat-készítő BMW-szervizeknek',
+      lines: ['Mándok, Ady Endre u. 14.', '+36 70 622 7451 · demjencsabi@gmail.com'],
+      car: BMW_320D, discs: ['300 mm', '330 mm', '24 mm'], partScale: 1.5 },
     mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
       lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };
