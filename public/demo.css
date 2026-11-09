@@ -287,3 +287,21 @@ a.btn, button.btn { cursor: pointer; }
   --accent-ink: #F0687C; --warn-bg: #2C1519;
 }
 .theme-absolute .s-logo, .theme-absolute .brand .logo { background: #C5CDD0; }
+
+/* T-Nice / Transporter (?m=tnice): VW blue and white. */
+:root.theme-vw {
+  --dark: #001E50; --accent: #0B5FD6; --accent-strong: #0846A3; --accent-ink: #0846A3;
+  --accent-rgb: 11,95,214; --on-accent: #FFFFFF;
+  --bg: #EEF3FA; --soft: #F6F9FD; --border: #CFDBEC; --warn-bg: #E8F0FC;
+}
+@media (prefers-color-scheme: dark) {
+  :root.theme-vw:not([data-theme="light"]) {
+    --bg: #0B1424; --card: #111D33; --soft: #16243E; --border: #263753;
+    --accent-ink: #7FB2FF; --warn-bg: #12264A;
+  }
+}
+:root.theme-vw[data-theme="dark"] {
+  --bg: #0B1424; --card: #111D33; --soft: #16243E; --border: #263753;
+  --accent-ink: #7FB2FF; --warn-bg: #12264A;
+}
+.theme-vw .s-logo, .theme-vw .brand .logo { background: #001E50; }

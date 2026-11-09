@@ -104,6 +104,22 @@
     absolute: { name: 'AbsoluteCar', logo: 'AC', img: '/absolutecar-logo.png', wide: true, theme: 'absolute', title: 'Árajánlat-készítő Ford-szervizeknek',
       lines: ['2120 Dunakeszi, Tőzegtavi út 10.', '+36 50 110 5246 · absolutecar2151@gmail.com'],
       car: FORD_FOCUS, discs: ['278 mm', '300 mm', '23 mm'] },
+    // VW Transporter specialist, Szentendre. White script logo, so it sits
+    // on a VW dark-blue tile; plays in VW blue and white (theme-vw).
+    tnice: { name: 'T-Nice Kft.', logo: 'TN', img: '/ttransporter-logo.png', wide: true, theme: 'vw', title: 'Árajánlat-készítő Transporter-szervizeknek',
+      lines: ['2000 Szentendre, Rózsa u. 18.', '+36 20 914 4033', 't.nice.kft@gmail.com'],
+      car: {
+        query: 'transporter 2.0 tdi',
+        results: [
+          { t: 'VW Transporter T5 2.0 TDI', code: 'CAAC', m: '2009–2015 · dízel · 103 kW' },
+          { t: 'VW Transporter T6 2.0 TDI', code: 'CXEB', m: '2015–2019 · dízel · 110 kW' },
+          { t: 'VW Transporter T6 2.0 TDI', code: 'CXHA', m: '2015–2019 · dízel · 75 kW' },
+        ],
+        pick: 1,
+        name: 'VW Transporter T6 2.0 TDI',
+        facts: 'Dízel · 110 kW · 2015–2019 · Motorkód: <b class="mono">CXEB</b>',
+      },
+      discs: ['308 mm', '340 mm', '29 mm'], partScale: 1.4 },
     mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
       lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };
