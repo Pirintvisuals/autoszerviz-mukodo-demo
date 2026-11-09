@@ -35,6 +35,19 @@
     facts: 'Dízel · 140 kW · 2015–2019 · Motorkód: <b class="mono">B47D20A</b>',
   };
 
+  // Shared by the Ford shops.
+  const FORD_FOCUS = {
+    query: 'focus 1.0 ecoboost',
+    results: [
+      { t: 'Ford Focus III 1.0 EcoBoost', code: 'M1DA', m: '2012–2018 · benzin · 74 kW' },
+      { t: 'Ford Focus III 1.0 EcoBoost', code: 'M2DA', m: '2012–2018 · benzin · 92 kW' },
+      { t: 'Ford Fiesta VII 1.0 EcoBoost', code: 'SFJA', m: '2012–2017 · benzin · 74 kW' },
+    ],
+    pick: 1,
+    name: 'Ford Focus III 1.0 EcoBoost',
+    facts: 'Benzin · 92 kW · 2012–2018 · Motorkód: <b class="mono">M2DA</b>',
+  };
+
   // Per-shop link (?m=...), same convention as the live tool: only the shop's
   // public name and contacts change, the prices stay the sample shop's.
   // Only that shop gets its link.
@@ -43,17 +56,7 @@
     // László is Ford-only, so his version plays on a Ford. No Ford logo: the
     // sheet would read as Ford's own estimate.
     kanti: { name: 'Kanti László', logo: 'KL', lines: ['06 30 222 4766'],
-      car: {
-        query: 'focus 1.0 ecoboost',
-        results: [
-          { t: 'Ford Focus III 1.0 EcoBoost', code: 'M1DA', m: '2012–2018 · benzin · 74 kW' },
-          { t: 'Ford Focus III 1.0 EcoBoost', code: 'M2DA', m: '2012–2018 · benzin · 92 kW' },
-          { t: 'Ford Fiesta VII 1.0 EcoBoost', code: 'SFJA', m: '2012–2017 · benzin · 74 kW' },
-        ],
-        pick: 1,
-        name: 'Ford Focus III 1.0 EcoBoost',
-        facts: 'Benzin · 92 kW · 2012–2018 · Motorkód: <b class="mono">M2DA</b>',
-      },
+      car: FORD_FOCUS,
       discs: ['278 mm', '300 mm', '23 mm'] },
     // Jaguar-only shop: plays on an XF, with parts priced for a Jaguar. Logo
     // is Jaguar's (Milán's call, 2026-11-05). The default customer is
@@ -96,11 +99,17 @@
     demjen: { name: 'Demjén Autószerviz', logo: 'DA', title: 'Árajánlat-készítő BMW-szervizeknek',
       lines: ['Mándok, Ady Endre u. 14.', '+36 70 622 7451 · demjencsabi@gmail.com'],
       car: BMW_320D, discs: ['300 mm', '330 mm', '24 mm'], partScale: 1.5 },
+    // Ford specialist (also all makes), Dunakeszi. Plays in their own
+    // colours (theme-absolute in demo.css); logo on their grey tile.
+    absolute: { name: 'AbsoluteCar', logo: 'AC', img: '/absolutecar-logo.png', wide: true, theme: 'absolute', title: 'Árajánlat-készítő Ford-szervizeknek',
+      lines: ['2120 Dunakeszi, Tőzegtavi út 10.', '+36 50 110 5246 · absolutecar2151@gmail.com'],
+      car: FORD_FOCUS, discs: ['278 mm', '300 mm', '23 mm'] },
     mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
       lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };
   const SHOP = SHOPS[(new URLSearchParams(location.search).get('m') || '').toLowerCase()];
   if (SHOP) {
+    if (SHOP.theme) document.documentElement.classList.add('theme-' + SHOP.theme);
     document.title = SHOP.title ? `${SHOP.title} - ${SHOP.name}` : `${SHOP.name} - árajánlat-készítő minta`;
     $('top-shop').textContent = SHOP.name;
     $('s-logo').textContent = SHOP.logo;
