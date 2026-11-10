@@ -120,6 +120,11 @@
         facts: 'Dízel · 110 kW · 2015–2019 · Motorkód: <b class="mono">CXEB</b>',
       },
       discs: ['308 mm', '340 mm', '29 mm'], partScale: 1.4 },
+    // BMW and Mini specialist, Gyöngyös (also Eger). Blue-navy logo on the
+    // white rectangle; plays in the logo's blue, navy and red (theme-webers).
+    webers: { name: 'Wébers Motors', logo: 'WM', img: '/webers-logo.png', wide: true, theme: 'webers', title: 'Árajánlat-készítő BMW-szervizeknek',
+      lines: ['Gyöngyös, Kócsag út 21.', '+36 30 938 1555', 'webersmotors@gmail.com'],
+      car: BMW_320D, discs: ['300 mm', '330 mm', '24 mm'], partScale: 1.5 },
     mpauto: { name: 'MP Autó', logo: 'MP', img: '/mp-autoszerviz-logo.png',
       lines: ['4030 Debrecen, Szabó Kálmán u. 74.', '+36 20 501 8227 · mpautoszerviz@gmail.com'], sign: 'Molnár Andor, szervizvezető' },
   };

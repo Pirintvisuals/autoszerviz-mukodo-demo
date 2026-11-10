@@ -305,3 +305,22 @@ a.btn, button.btn { cursor: pointer; }
   --accent-ink: #7FB2FF; --warn-bg: #12264A;
 }
 .theme-vw .s-logo, .theme-vw .brand .logo { background: #001E50; }
+
+/* Wébers Motors (?m=webers): their logo's blue #0071B9, navy #004584,
+   red #E3000F as the thin line under the estimate head. */
+:root.theme-webers {
+  --dark: #00284D; --accent: #0071B9; --accent-strong: #004584; --accent-ink: #004584;
+  --accent-rgb: 0,113,185; --on-accent: #FFFFFF;
+  --bg: #EDF3F8; --soft: #F5F9FC; --border: #CBDAE7; --warn-bg: #E6F1FA;
+}
+@media (prefers-color-scheme: dark) {
+  :root.theme-webers:not([data-theme="light"]) {
+    --bg: #0A1622; --card: #102033; --soft: #152A40; --border: #233B55;
+    --accent-ink: #6CB8F0; --warn-bg: #10304D;
+  }
+}
+:root.theme-webers[data-theme="dark"] {
+  --bg: #0A1622; --card: #102033; --soft: #152A40; --border: #233B55;
+  --accent-ink: #6CB8F0; --warn-bg: #10304D;
+}
+.theme-webers .s-head { border-bottom-color: #E3000F; }
